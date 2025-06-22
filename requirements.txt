@@ -1,4 +1,6 @@
-Flask
-line-bot-sdk>=3.0.0,<4.0.0
+flask
+line-bot-sdk
+requests
+python-dotenv
 
 
