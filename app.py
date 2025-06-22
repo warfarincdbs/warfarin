@@ -8,12 +8,13 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
-# โหลด .env
+# ✅ โหลด .env
 load_dotenv()
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 google_script_url = os.getenv("GOOGLE_SCRIPT_URL")
 
+# ✅ LINE Bot Setup
 app = Flask(__name__)
 handler = WebhookHandler(channel_secret)
 configuration = Configuration(access_token=access_token)
@@ -35,7 +36,7 @@ def handle_message(event):
     text = event.message.text.strip().lower()
     reply_token = event.reply_token
 
-    # ✅ บันทึกค่า INR
+    # ✅ ถ้าพิมพ์ INR 2.5
     match = re.match(r"inr\s*([0-9.]+)", text)
     if match:
         inr = float(match.group(1))
@@ -43,17 +44,20 @@ def handle_message(event):
         messaging_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
-                messages=[TextMessage(text=f"✅ บันทึก INR {inr} แล้ว")]
+                messages=[TextMessage(text=f"✅ บันทึก INR {inr} สำเร็จ")]
             )
         )
         return
 
-    # ✅ ดูประวัติ INR
+    # ✅ ถ้าพิมพ์ "ดูประวัติ"
     if "ดูประวัติ" in text:
-        resp = requests.get(google_script_url)
-        data = resp.json()
-        user_logs = [f"• {row[1]} เมื่อ {row[2]}" for row in data if row[0] == user_id][-5:]
-        msg = "📋 ประวัติ INR ล่าสุด:\n" + "\n".join(user_logs) if user_logs else "ยังไม่มีประวัติ"
+        try:
+            resp = requests.get(google_script_url)
+            data = resp.json()
+            user_logs = [f"• {row[1]} เมื่อ {row[2]}" for row in data if row[0] == user_id][-5:]
+            msg = "📋 ประวัติ INR ล่าสุด:\n" + "\n".join(user_logs) if user_logs else "ยังไม่มีข้อมูล"
+        except:
+            msg = "❌ ดึงข้อมูลผิดพลาด"
         messaging_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
@@ -61,5 +65,8 @@ def handle_message(event):
             )
         )
         return
-    if __name__ == "__main__":
-    app.run(port=5000)
+
+# ✅ เริ่ม Flask บน Render
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
