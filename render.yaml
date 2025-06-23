@@ -1,18 +1,7 @@
-yaml
-Copy
-Edit
 services:
   - type: web
     name: warfarin-bot
     env: python
-    buildCommand: ""
-    startCommand: python app.py
-    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
     plan: free
-    envVars:
-      - key: LINE_CHANNEL_SECRET
-        sync: false
-      - key: LINE_CHANNEL_ACCESS_TOKEN
-        sync: false
-    region: oregon
-    pythonVersion: 3.10.12
