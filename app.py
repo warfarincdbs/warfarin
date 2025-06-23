@@ -24,7 +24,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxbfc3tY3YcUIhvlh4koGdnq2uexT5-lXq1XxViFpPx7V_pw__snBi_ycnL4KoSPk/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRepMoaHGYhk61L4DIHq7S45_bnUoQUmzceWfPE23cqrOvz_d7h_waN-zqD3ymxiqoDA/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -78,18 +78,6 @@ def callback():
         abort(400)
     return "OK"
 
-def get_latest_name(user_id):
-    try:
-        res = requests.get(
-            f"{GOOGLE_APPS_SCRIPT_URL}?userId={user_id}&onlyName=true",
-            timeout=10
-        )
-        if res.status_code == 200:
-            return res.text.strip() or None
-    except:
-        return None
-
-
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
@@ -99,26 +87,24 @@ def handle_message(event):
 
     # เริ่มต้น flow
     if text == "เริ่มต้นใช้งาน":
-        existing_name = get_latest_name(user_id)
-    if existing_name:
-        user_sessions[user_id] = {
-            "step": "ask_inr",
-            "name": existing_name
-        }
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text=f"👋 ยินดีต้อนรับกลับคุณ {existing_name}\n🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-            ])
-        )
-    else:
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
             ])
         )
-    return
+        return
 
+    # ถามชื่อ
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
+        user_sessions[user_id]["name"] = text
+        user_sessions[user_id]["step"] = "ask_inr"
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+            ])
+        )
+        return
 
     # ถามค่า INR
     if user_sessions[user_id]["step"] == "ask_inr":
