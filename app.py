@@ -1,10 +1,15 @@
-from flask import Flask, request, abort 
+import os
+import re
+import requests
+from datetime import datetime, timedelta
+
+from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
-from linebot.v3.messaging import (Configuration, ApiClient, MessagingApi,TextMessage, ReplyMessageRequest)
+from linebot.v3.messaging import (
+    Configuration, ApiClient, MessagingApi, TextMessage, ReplyMessageRequest
+)
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
-import os
-from datetime import datetime, timedelta
 from linebot.v3.messaging import FlexMessage
 from linebot.v3.messaging.models import FlexContainer
 
