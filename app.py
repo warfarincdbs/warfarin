@@ -155,6 +155,7 @@ def handle_message(event):
             bleeding=session["bleeding"],
             supplement=session["supplement"]
         )
+        print(result)
 
         reply = f"""✅ ข้อมูลถูกบันทึกเรียบร้อยแล้ว
 👤 {session['name']}
