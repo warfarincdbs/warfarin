@@ -3,7 +3,7 @@ import requests
 
 app = Flask(__name__)
 
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDZ8WPdzpzgACUboEi_JARVTRsnN_yg9Qnfy2FmxThTEESDZ56gbPodjb5AAGxagKvUA/exec"  # ใส่ของคุณตรงนี้
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzub3wldSNiC-I5WHwxBx5HvdKOuUNnGVHAxP7J_HQJcFimWGSvH2RPZ2a3Itn0egybHw/exec"  # ใส่ของคุณตรงนี้
 
 @app.route("/", methods=["GET"])
 def home():
