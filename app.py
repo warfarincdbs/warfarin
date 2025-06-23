@@ -1,15 +1,10 @@
-import os
-import re
-import requests
-from datetime import datetime, timedelta
-
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
-from linebot.v3.messaging import (
-    Configuration, ApiClient, MessagingApi, TextMessage, ReplyMessageRequest
-)
+from linebot.v3.messaging import (Configuration, ApiClient, MessagingApi,TextMessage, ReplyMessageRequest)
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
+import os
+from datetime import datetime, timedelta
 from linebot.v3.messaging import FlexMessage
 from linebot.v3.messaging.models import FlexContainer
 
@@ -19,7 +14,6 @@ app = Flask(__name__)
 # ✅ ดึงค่าจาก Environment Variables
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-google_script_url = os.getenv("GOOGLE_SCRIPT_URL")
 
 handler = WebhookHandler(channel_secret)
 configuration = Configuration(access_token=access_token)
@@ -38,6 +32,65 @@ def callback():
     except InvalidSignatureError:
         abort(400)
     return "OK"
+
+def calculate_warfarin(inr, twd, bleeding, supplement=None):
+    if bleeding == "yes":
+        return "\U0001f6a8 มี major bleeding → หยุด Warfarin, ให้ Vitamin K1 10 mg IV"
+
+    warning = ""
+    if supplement:
+        herb_map = {
+            "กระเทียม": "garlic", "ใบแปะก๊วย": "ginkgo", "โสม": "ginseng",
+            "ขมิ้น": "turmeric", "น้ำมันปลา": "fish oil", "dong quai": "dong quai", "cranberry": "cranberry",
+            "ตังกุย": "dong quai", "โกจิ": "goji berry", "คาร์โมไมล์": "chamomile", "ขิง": "ginger", "ชะเอมเทศ": "licorice",
+            "ชาเขียว": "green tea", "นมถั่วเหลือง": "soy milk", "คลอโรฟิลล์": "chlorophyll",
+            "วิตามินเค": "vitamin K", "โคเอนไซม์ Q10": "Coenzyme Q10", "St.John’s Wort": "St.John’s Wort"
+        }
+        high_risk = list(herb_map.keys())
+        matched = [name for name in high_risk if name in supplement]
+        if matched:
+            herbs = ", ".join(matched)
+            warning = f"\n\u26a0\ufe0f พบว่าสมุนไพร/อาหารเสริมที่อาจมีผลต่อ INR ได้แก่: {herbs}\nโปรดพิจารณาความเสี่ยงต่อการเปลี่ยนแปลง INR อย่างใกล้ชิด"
+        else:
+            warning = "\n\u26a0\ufe0f มีการใช้อาหารเสริมหรือสมุนไพร → พิจารณาความเสี่ยงต่อการเปลี่ยนแปลง INR"
+
+    followup_text = get_followup_text(inr)
+
+    if inr < 1.5:
+        result = f"\U0001f539 INR < 1.5 → เพิ่มขนาดยา 10–20%\nขนาดยาใหม่: {twd * 1.1:.1f} – {twd * 1.2:.1f} mg/สัปดาห์"
+    elif 1.5 <= inr <= 1.9:
+        result = f"\U0001f539 INR 1.5–1.9 → เพิ่มขนาดยา 5–10%\nขนาดยาใหม่: {twd * 1.05:.1f} – {twd * 1.10:.1f} mg/สัปดาห์"
+    elif 2.0 <= inr <= 3.0:
+        result = "✅ INR 2.0–3.0 → คงขนาดยาเดิม"
+    elif 3.1 <= inr <= 3.9:
+        result = f"\U0001f539 INR 3.1–3.9 → ลดขนาดยา 5–10%\nขนาดยาใหม่: {twd * 0.9:.1f} – {twd * 0.95:.1f} mg/สัปดาห์"
+    elif 4.0 <= inr <= 4.9:
+        result = f"⚠\ufe0f INR 4.0–4.9 → หยุดยา 1 วัน และลดขนาดยา 10%\nขนาดยาใหม่: {twd * 0.9:.1f} mg/สัปดาห์"
+    elif 5.0 <= inr <= 8.9:
+        result = "⚠\ufe0f INR 5.0–8.9 → หยุดยา 1–2 วัน และพิจารณาให้ Vitamin K1 1 mg"
+    else:
+        result = "\U0001f6a8 INR ≥ 9.0 → หยุดยา และพิจารณาให้ Vitamin K1 5–10 mg"
+
+    return f"{result}{warning}\n\n{followup_text}"
+
+def get_inr_followup(inr):
+    if inr < 1.5: return 7
+    elif inr <= 1.9: return 14
+    elif inr <= 3.0: return 56
+    elif inr <= 3.9: return 14
+    elif inr <= 6.0: return 7
+    elif inr <= 8.9: return 5
+    elif inr > 9.0: return 2
+    return None
+
+def get_followup_text(inr):
+    days = get_inr_followup(inr)
+    if days:
+        date = (datetime.now() + timedelta(days=days)).strftime("%-d %B %Y")
+        return f"📅  คำแนะนำ: ควรตรวจ INR ภายใน {days} วัน\n📌 วันที่ควรตรวจ: {date}"
+    else:
+        return ""
+
 
 
 def send_supplement_flex(reply_token):
@@ -67,7 +120,7 @@ def send_supplement_flex(reply_token):
                         *[
                             {"type": "button", "style": "primary", "height": "sm", "color": "#AEC6CF",
                              "action": {"type": "message", "label": herb, "text": herb}}
-                            for herb in ["กระเทียม", "ใบแปะก๊วย", "โสม", "ขมิ้น", "น้ำมันปลา", "ใช้หลายชนิด", "สมุนไพร/อาหารเสริมชนิดอื่นๆ"]
+                            for herb in ["กระเทียม", "ใบแปะก๊วย", "โสม", "ขมิ้น", "ขิง", "น้ำมันปลา", "ใช้หลายชนิด", "สมุนไพร/อาหารเสริมชนิดอื่นๆ"]
                         ]
                     ]
                 }
@@ -89,8 +142,8 @@ def send_supplement_flex(reply_token):
     )
 def send_interaction_flex(reply_token):
     interaction_drugs = [
-        "Amiodarone", "Metronidazole", "Trimethoprim/Sulfamethoxazole",
-        "Fluconazole", "Erythromycin", "NSAIDs", "Aspirin"
+        "Amiodarone", "Gemfibrozil", "Azole antifungal", "Trimethoprim/Sulfamethoxazole",
+        "Macrolides(ex.Erythromycin)", "NSAIDs", "Quinolones(ex.Ciprofloxacin)"
     ]
     flex_content = {
         "type": "bubble",
@@ -148,43 +201,149 @@ def handle_message(event):
     text = user_text.strip()
     text_lower = text.lower()
 
-     # ✅ บันทึก INR เช่น 'INR 2.4'
-    match = re.match(r"inr\s*([0-9.]+)", text_lower)
-    if match:
-        try:
-            inr_value = float(match.group(1))
-            requests.post(google_script_url, json={"user_id": user_id, "inr_value": inr_value})
-            messaging_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=reply_token,
-                    messages=[TextMessage(text=f"✅ บันทึก INR {inr_value} สำเร็จ")]
-                )
-            )
-        except:
-            messaging_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=reply_token,
-                    messages=[TextMessage(text="❌ ไม่สามารถบันทึกได้ โปรดลองอีกครั้ง")]
-                )
-            )
-        return
-
-    # ✅ ดูประวัติ INR
-    if "ดูประวัติ" in text_lower:
-        try:
-            resp = requests.get(google_script_url)
-            data = resp.json()
-            user_logs = [f"• {row[1]} เมื่อ {row[2]}" for row in data if row[0] == user_id][-5:]
-            result = "📋 ประวัติ INR ล่าสุด:\n" + "\n".join(user_logs) if user_logs else "ยังไม่มีข้อมูลที่บันทึก"
-        except:
-            result = "❌ ไม่สามารถโหลดข้อมูลจากระบบได้"
+    if text_lower in ['คำนวณยา warfarin']:
+        user_sessions.pop(user_id, None)
+        user_drug_selection.pop(user_id, None)
+        user_sessions[user_id] = {"flow": "warfarin", "step": "ask_inr"}
         messaging_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
-                messages=[TextMessage(text=result)]
+                messages=[TextMessage(text="🧪 กรุณาใส่ค่า INR (เช่น 2.5)")]
             )
         )
-        return 
+        return
+
+    if user_id in user_sessions:
+        session = user_sessions[user_id]
+        if session.get("flow") == "warfarin":
+            step = session.get("step")
+            if step == "ask_inr":
+                try:
+                    session["inr"] = float(text)
+                    session["step"] = "ask_twd"
+                    reply = "📈 ใส่ Total Weekly Dose (TWD) เช่น 28"
+                except:
+                    reply = "❌ กรุณาใส่ค่า INR เป็นตัวเลข เช่น 2.5"
+                messaging_api.reply_message(
+                    ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
+                )
+                return
+
+            elif step == "ask_twd":
+                try:
+                    session["twd"] = float(text)
+                    session["step"] = "ask_bleeding"
+                    reply = "🩸 มี major bleeding หรือไม่? (yes/no)"
+                except:
+                    reply = "❌ กรุณาใส่ค่า TWD เป็นตัวเลข เช่น 28"
+                messaging_api.reply_message(
+                    ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
+                )
+                return
+
+            elif step == "ask_bleeding":
+                if text.lower().strip(".") not in ["yes", "no"]:
+                    reply = "❌ ตอบว่า yes หรือ no เท่านั้น"
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
+                    )
+                    return
+                session["bleeding"] = text.lower()
+                if text.lower().strip(".") == "yes":
+                # ✅ มี bleeding → แสดงผลทันทีและจบ flow
+                    result = calculate_warfarin(session["inr"], session["twd"], session["bleeding"])
+                    user_sessions.pop(user_id, None)
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=result)])
+                )
+                
+                else:   
+                    # ถ้าไม่มี bleeding → ไปถามเรื่องสมุนไพรต่อ
+                    session["step"] = "choose_supplement"
+                    send_supplement_flex(reply_token)
+                return
+
+
+            elif step == "choose_supplement":
+                if text == "ไม่ได้ใช้":
+                    session["supplement"] = ""
+                    session["step"] = "choose_interaction"
+                    send_interaction_flex(reply_token)
+                    return
+
+                elif text == "สมุนไพร/อาหารเสริมชนิดอื่นๆ":
+                    session["step"] = "ask_custom_supplement"
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(
+                            reply_token=reply_token,
+                            messages=[TextMessage(text="🌿 กรุณาพิมพ์ชื่อสมุนไพร/อาหารเสริมที่ใช้ เช่น ตังกุย ขิง ชาเขียว")]
+                        )
+                    )
+                    return
+                
+                elif step == "ask_custom_supplement":
+                    session["supplement"] = text
+                    session["step"] = "choose_interaction"
+                    send_interaction_flex(reply_token)
+                    return
+
+                else:
+                    session["supplement"] = text
+                    session["step"] = "choose_interaction"
+                    send_interaction_flex(reply_token)
+                    return
+
+            elif step == "choose_interaction":
+                if text == "ไม่ได้ใช้":
+                    interaction_note = ""
+                    supplement = session.get("supplement", "")
+                    result = calculate_warfarin(session["inr"], session["twd"], session["bleeding"], supplement)
+                    final_result = f"{result.split('\n\n')[0]}{interaction_note}\n\n{result.split('\n\n')[1]}"
+                    user_sessions.pop(user_id, None)
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=final_result)])
+                    )
+                    return
+
+                elif text in ["ใช้หลายชนิด", "ยาชนิดอื่นๆ"]:
+                    session["step"] = "ask_interaction"
+                    reply = "💊 โปรดพิมพ์ชื่อยาที่ใช้อยู่ เช่น Amiodarone, NSAIDs"
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
+                    )
+                    return
+
+                else:
+                    interaction_note = f"\n⚠️ พบการใช้ยา: {text} ซึ่งอาจมีปฏิกิริยากับ Warfarin"
+                    supplement = session.get("supplement", "")
+                    result = calculate_warfarin(session["inr"], session["twd"], session["bleeding"], supplement)
+                    final_result = f"{result.split('\n\n')[0]}{interaction_note}\n\n{result.split('\n\n')[1]}"
+                    user_sessions.pop(user_id, None)
+                    messaging_api.reply_message(
+                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=final_result)])
+                    )
+                    return
+
+            elif step == "ask_interaction":
+                interaction_note = f"\n⚠️ พบการใช้ยา: {text.strip()} ซึ่งอาจมีปฏิกิริยากับ Warfarin"
+                supplement = session.get("supplement", "")
+                result = calculate_warfarin(session["inr"], session["twd"], session["bleeding"], supplement)
+                final_result = f"{result.split('\n\n')[0]}{interaction_note}\n\n{result.split('\n\n')[1]}"
+                user_sessions.pop(user_id, None)
+                messaging_api.reply_message(
+                    ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=final_result)])
+                )
+                return
+
+
+    if user_id not in user_sessions and user_id not in user_drug_selection:
+        messaging_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[TextMessage(text="❓ พิมพ์ 'คำนวณยา warfarin' หรือ 'คำนวณยาเด็ก' เพื่อเริ่มต้นใช้งาน")]
+            )
+        )
+        return
 
 @app.route("/")
 def home():
