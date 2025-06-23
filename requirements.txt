@@ -1,6 +1,6 @@
-Flask
+flask
 gunicorn
-line-bot-sdk==3.4.0
+line-bot-sdk>=3.0.0
 requests
 python-dotenv
-
+aiohttp==3.8.6
