@@ -107,7 +107,7 @@ def handle_message(event):
         return
 
     # ถามค่า INR
-    if user_sessions[user_id]["step"] == "ask_inr":
+   if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_inr":
         try:
             inr = float(text)
             user_sessions[user_id]["inr"] = inr
