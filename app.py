@@ -190,6 +190,3 @@ def handle_message(event):
 def home():
     return "✅ LINE Bot is ready to receive Webhook"
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
