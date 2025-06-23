@@ -24,7 +24,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbza1rHmPavl3SynzKN0Y9D_TFxd3gSmGNUVvgScdrip0DTpyXUu43d70KvOeApzJHBV9g/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxlTfVYVPuXBBA8vR6qbAm8Zpe7TrqU2BFt32G7ASSON35dBXJ5AWA7m8I6SvaGVTe5qg/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
