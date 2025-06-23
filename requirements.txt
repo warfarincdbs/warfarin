@@ -1,6 +1,6 @@
-flask
-line-bot-sdk
+Flask
+gunicorn
+line-bot-sdk==3.4.0
 requests
 python-dotenv
-
 
