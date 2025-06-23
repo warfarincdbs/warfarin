@@ -9,6 +9,8 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
+from dotenv import load_dotenv
+load_dotenv()
 
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
