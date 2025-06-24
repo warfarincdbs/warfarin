@@ -66,8 +66,6 @@ def log_inr():
     result = send_to_google_sheet(userId, name, inr, bleeding, supplement)
     return jsonify({"status": "sent", "google_response": result})
 
-# ====== Webhook Endpoint (LINE) ======
-@app.route("/callback", methods=["POST"])
 def get_name_from_userid(user_id):
     try:
         response = requests.get(
@@ -81,6 +79,8 @@ def get_name_from_userid(user_id):
         print(f"Error getting name from Google Sheet: {e}")
         return ""
 
+# ====== Webhook Endpoint (LINE) ======
+@app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers.get("X-Line-Signature")
     body = request.get_data(as_text=True)
@@ -102,25 +102,24 @@ def handle_message(event):
     if text == "เริ่มต้นใช้งาน":
         name = get_name_from_userid(user_id)
 
-    if name:
-        user_sessions[user_id] = {
-            "step": "ask_inr",
-            "name": name
-        }
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text=f"👋 ยินดีต้อนรับกลับคุณ {name}!\n🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-            ])
-        )
-    else:
-        user_sessions[user_id] = {"step": "ask_name"}
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
-            ])
-        )
-    return
-
+        if name:
+            user_sessions[user_id] = {
+                "step": "ask_inr",
+                "name": name
+            }
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text=f"👋 ยินดีต้อนรับกลับคุณ {name}!\n🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+                ])
+            )
+        else:
+            user_sessions[user_id] = {"step": "ask_name"}
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
+                ])
+            )
+        return
 
     # ถามชื่อ
     if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
@@ -134,7 +133,7 @@ def handle_message(event):
         return
 
     # ถามค่า INR
-    if user_sessions[user_id]["step"] == "ask_inr":
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_inr":
         try:
             inr = float(text)
             user_sessions[user_id]["inr"] = inr
@@ -153,7 +152,7 @@ def handle_message(event):
         return
 
     # ถาม bleeding
-    if user_sessions[user_id]["step"] == "ask_bleeding":
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_bleeding":
         if text.lower() not in ["yes", "no"]:
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
@@ -171,7 +170,7 @@ def handle_message(event):
         return
 
     # ✅ สุดท้าย: บันทึก Supplement และส่งไป Google Sheet
-    if user_sessions[user_id]["step"] == "ask_supplement":
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_supplement":
         session = user_sessions.pop(user_id)
         session["supplement"] = text
 
@@ -182,7 +181,6 @@ def handle_message(event):
             bleeding=session["bleeding"],
             supplement=session["supplement"]
         )
-        print(result)
 
         reply = f"""✅ ข้อมูลถูกบันทึกเรียบร้อยแล้ว
 👤 {session['name']}
@@ -195,11 +193,11 @@ def handle_message(event):
         )
         return
 
-    # กรณีไม่มี session
+    # หากไม่มี session และไม่ได้พิมพ์ว่าเริ่มต้นใช้งาน
     if user_id not in user_sessions:
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="❓ พิมพ์ 'เริ่มต้นใช้งาน' เพื่อบันทึกข้อมูล INR")
+                TextMessage(text="❓ พิมพ์ 'เริ่มต้นใช้งาน' เพื่อเริ่มกรอกข้อมูล INR")
             ])
         )
 
