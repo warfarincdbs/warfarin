@@ -68,6 +68,19 @@ def log_inr():
 
 # ====== Webhook Endpoint (LINE) ======
 @app.route("/callback", methods=["POST"])
+def get_name_from_userid(user_id):
+    try:
+        response = requests.get(
+            GOOGLE_APPS_SCRIPT_URL,
+            params={"userId": user_id, "onlyName": "true"},
+            timeout=5
+        )
+        name = response.text.strip()
+        return name
+    except Exception as e:
+        print(f"Error getting name from Google Sheet: {e}")
+        return ""
+
 def callback():
     signature = request.headers.get("X-Line-Signature")
     body = request.get_data(as_text=True)
@@ -87,13 +100,27 @@ def handle_message(event):
 
     # เริ่มต้น flow
     if text == "เริ่มต้นใช้งาน":
+        name = get_name_from_userid(user_id)
+
+    if name:
+        user_sessions[user_id] = {
+            "step": "ask_inr",
+            "name": name
+        }
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text=f"👋 ยินดีต้อนรับกลับคุณ {name}!\n🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+            ])
+        )
+    else:
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
             ])
         )
-        return
+    return
+
 
     # ถามชื่อ
     if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
