@@ -10,7 +10,7 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
-from inr_chart import generate_inr_chart  # ✅ เพิ่มบรรทัดนี้
+from inr_chart import generate_inr_chart
 
 load_dotenv()
 
@@ -26,7 +26,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytS-kbQhIlrJ1Mx56bsooAXrMxyw5XrmVasDVma6NQ3BrJmRqGgBAGSfn7VgG0Qlcv9Q/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbxslA3d641BIjPOClJZenJcuQRvJLkRp8MMMVGgh6Ssd_H50OXlfH2qpeYDvd_5MbjQ/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -67,9 +67,19 @@ def log_inr():
     result = send_to_google_sheet(userId, name, inr, bleeding, supplement, warfarin_dose)
     return jsonify({"status": "sent", "google_response": result})
 
-# ✅ วางฟังก์ชันนี้ "ตรงนี้เลย"
+# ====== Webhook Endpoint (LINE) ======
+@app.route("/callback", methods=["POST"])
+def callback():
+    signature = request.headers.get("X-Line-Signature")
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
+
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbytS-kbQhIlrJ1Mx56bsooAXrMxyw5XrmVasDVma6NQ3BrJmRqGgBAGSfn7VgG0Qlcv9Q/exec"  # เปลี่ยน URL เป็นของคุณ
+    url = "https://script.google.com/macros/s/PASTE_YOUR_SCRIPT_ID_HERE/exec"  # เปลี่ยน URL นี้
     try:
         response = requests.get(url, params={"userId": user_id}, timeout=10)
         data = response.json()
@@ -84,11 +94,9 @@ def get_inr_history_from_sheet(user_id):
     
 def upload_image_and_reply(user_id, reply_token, image_buf):
     from linebot.v3.messaging import ImageMessage, ReplyMessageRequest
-
     tmp_path = f"/tmp/inr_chart_{user_id}.png"
     with open(tmp_path, "wb") as f:
         f.write(image_buf.read())
-
     with open(tmp_path, "rb") as f:
         res = messaging_api.upload_rich_media(f)
 
@@ -96,25 +104,9 @@ def upload_image_and_reply(user_id, reply_token, image_buf):
     messaging_api.reply_message(
         ReplyMessageRequest(
             reply_token=reply_token,
-            messages=[
-                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
-            ]
+            messages=[ImageMessage(original_content_url=image_url, preview_image_url=image_url)]
         )
     )
-
-# ====== Webhook Endpoint (LINE) ======
-@app.route("/callback", methods=["POST"])
-def callback():
-    signature = request.headers.get("X-Line-Signature")
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return "OK"
-
-
-
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
@@ -122,7 +114,6 @@ def handle_message(event):
     reply_token = event.reply_token
     text = event.message.text.strip()
 
-     # ====== ดูกราฟ INR ======
     if text == "ดูกราฟ INR":
         dates, inrs = get_inr_history_from_sheet(user_id)
         if not dates:
@@ -249,8 +240,6 @@ def handle_message(event):
                 TextMessage(text="❓ พิมพ์ 'เริ่มต้นใช้งาน' เพื่อบันทึกข้อมูล INR")
             ])
         )
-
-
 
 # ====== Run App ======
 if __name__ == "__main__":
