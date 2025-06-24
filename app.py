@@ -45,23 +45,6 @@ def send_to_google_sheet(user_id, name, inr, bleeding="", supplement=""):
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
-def get_inr_history(user_id):
-    try:
-        response = requests.get(
-            GOOGLE_APPS_SCRIPT_URL,
-            params={"userId": user_id, "history": "true"},
-            timeout=10
-        )
-        if response.status_code == 200:
-            history = response.json()
-            return history
-        else:
-            return []
-    except Exception as e:
-        print(f"Error getting INR history: {e}")
-        return []
-
-
 # ====== หน้า Home ======
 @app.route("/", methods=["GET"])
 def home():
@@ -101,27 +84,6 @@ def handle_message(event):
     user_id = event.source.user_id
     reply_token = event.reply_token
     text = event.message.text.strip()
-
-
-    # ฟีเจอร์: ดูประวัติ INR
-    if text == "ดูประวัติ INR":
-        history = get_inr_history(user_id)
-        if not history:
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="ไม่พบข้อมูล INR ย้อนหลังสำหรับคุณ")
-                ])
-            )
-        else:
-            msg = "📜 ประวัติ INR ย้อนหลัง (ล่าสุด 5 ครั้ง):\n"
-            for item in history:
-                msg += f"📅 {item['date']}: {item['inr']}\n"
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text=msg.strip())
-                ])
-            )
-        return
 
     # เริ่มต้น flow
     if text == "เริ่มต้นใช้งาน":
