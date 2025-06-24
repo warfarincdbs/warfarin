@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, abort
 import os
 import requests
+
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
@@ -9,6 +10,7 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
+from inr_chart import generate_inr_chart  # ✅ เพิ่มบรรทัดนี้
 
 load_dotenv()
 
@@ -24,7 +26,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbxslA3d641BIjPOClJZenJcuQRvJLkRp8MMMVGgh6Ssd_H50OXlfH2qpeYDvd_5MbjQ/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytS-kbQhIlrJ1Mx56bsooAXrMxyw5XrmVasDVma6NQ3BrJmRqGgBAGSfn7VgG0Qlcv9Q/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -65,6 +67,41 @@ def log_inr():
     result = send_to_google_sheet(userId, name, inr, bleeding, supplement, warfarin_dose)
     return jsonify({"status": "sent", "google_response": result})
 
+# ✅ วางฟังก์ชันนี้ "ตรงนี้เลย"
+def get_inr_history_from_sheet(user_id):
+    url = "https://script.google.com/macros/s/AKfycbytS-kbQhIlrJ1Mx56bsooAXrMxyw5XrmVasDVma6NQ3BrJmRqGgBAGSfn7VgG0Qlcv9Q/exec"  # เปลี่ยน URL เป็นของคุณ
+    try:
+        response = requests.get(url, params={"userId": user_id}, timeout=10)
+        data = response.json()
+        if not data:
+            return [], []
+        dates = [item["date"] for item in data]
+        inrs = [float(item["inr"]) for item in data]
+        return dates, inrs
+    except Exception as e:
+        print(f"Error fetching INR: {e}")
+        return [], []
+    
+def upload_image_and_reply(user_id, reply_token, image_buf):
+    from linebot.v3.messaging import ImageMessage, ReplyMessageRequest
+
+    tmp_path = f"/tmp/inr_chart_{user_id}.png"
+    with open(tmp_path, "wb") as f:
+        f.write(image_buf.read())
+
+    with open(tmp_path, "rb") as f:
+        res = messaging_api.upload_rich_media(f)
+
+    image_url = res.content_provider.original_content_url
+    messaging_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[
+                ImageMessage(original_content_url=image_url, preview_image_url=image_url)
+            ]
+        )
+    )
+
 # ====== Webhook Endpoint (LINE) ======
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -76,12 +113,28 @@ def callback():
         abort(400)
     return "OK"
 
+
+
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_id = event.source.user_id
     reply_token = event.reply_token
     text = event.message.text.strip()
+
+     # ====== ดูกราฟ INR ======
+    if text == "ดูกราฟ INR":
+        dates, inrs = get_inr_history_from_sheet(user_id)
+        if not dates:
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="❌ ไม่พบข้อมูล INR ย้อนหลังของคุณ")
+                ])
+            )
+            return
+        buf = generate_inr_chart(dates, inrs)
+        upload_image_and_reply(user_id, reply_token, buf)
+        return
 
     # เริ่มต้นใช้งาน
     if text == "บันทึกค่า INR":
@@ -148,7 +201,7 @@ def handle_message(event):
         session["step"] = "ask_warf_dose"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="💊 กรุณาระบุขนาดยา Warfarin รายวันใน 1 สัปดาห์ (เช่น 3,3,3,3,3,1.5,-)")
+                TextMessage(text="💊 กรุณาระบุขนาดยา Warfarin รายวันใน 1 สัปดาห์ จันทร์,อังคาร,พุธ,....,อาทิตย์ (เช่น 3,3,3,3,3,1.5,0)")
             ])
         )
         return
@@ -196,6 +249,8 @@ def handle_message(event):
                 TextMessage(text="❓ พิมพ์ 'เริ่มต้นใช้งาน' เพื่อบันทึกข้อมูล INR")
             ])
         )
+
+
 
 # ====== Run App ======
 if __name__ == "__main__":
