@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify, abort
 import os
 import requests
@@ -12,6 +13,12 @@ from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
 load_dotenv()
 
+import matplotlib.pyplot as plt
+import io
+import tempfile
+
+
+
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -24,8 +31,8 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrNtxEAwnvgXbomU7Im7Ww53piAEql9Rf-580KD_FHD3vY1NeO1tG5PEFkzDWrVKSexw/exec"
-
+GOOGLE_APPS_SCRIPT_URL = " https://script.google.com/macros/s/AKfycbwxbfc3tY3YcUIhvlh4koGdnq2uexT5-lXq1XxViFpPx7V_pw__snBi_ycnL4KoSPk/exec"
+                           
 # ====== In-Memory Session ======
 user_sessions = {}
 
@@ -45,34 +52,59 @@ def send_to_google_sheet(user_id, name, inr, bleeding="", supplement=""):
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
-def get_user_name_from_sheet(user_id):
+def generate_inr_chart(history):
+    dates = [item["date"] for item in history][::-1]   # กลับลำดับให้เก่าสุดอยู่ซ้าย
+    inr_values = [float(item["inr"]) for item in history][::-1]
+
+    plt.figure(figsize=(6, 3))
+    plt.plot(dates, inr_values, marker="o", linestyle="-")
+    plt.title("📈 INR ย้อนหลัง")
+    plt.xlabel("วันที่")
+    plt.ylabel("ค่า INR")
+    plt.grid(True)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close()
+
+    return buf
+def reply_inr_chart_image(user_id, reply_token, chart_buf):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+        tmpfile.write(chart_buf.read())
+        tmpfile_path = tmpfile.name
+
+    # 🔧 TODO: อัปโหลด tmpfile_path ไปยัง URL จริง แล้วแทนด้านล่าง
+    # 🔧 เช่น อัปโหลดไปยัง Imgur หรือใช้ Render static hosting
+    image_url = "https://your-host.com/path-to-uploaded-image.png"
+
+    messaging_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[
+                ImageMessage(
+                    original_content_url=image_url,
+                    preview_image_url=image_url
+                )
+            ]
+        )
+    )
+
+def get_inr_history(user_id):
     try:
         response = requests.get(
             GOOGLE_APPS_SCRIPT_URL,
-            params={"userId": user_id, "onlyName": "true"},
+            params={"userId": user_id, "history": "true"},
             timeout=10
         )
         if response.status_code == 200:
-            name = response.text.strip()
-            return name if name else None
+            return response.json()
         else:
-            return None
+            return []
     except Exception as e:
-        print(f"Error getting name: {e}")
-        return None
-
-def save_name_to_sheet(user_id, name):
-    try:
-        response = requests.get(
-            GOOGLE_APPS_SCRIPT_URL,
-            params={"userId": user_id, "saveName": name},
-            timeout=10
-        )
-        return response.text
-    except Exception as e:
-        print(f"Error saving name: {e}")
-        return f"❌ Error saving name: {str(e)}"
-
+        print(f"Error fetching INR history: {e}")
+        return []
 
 # ====== หน้า Home ======
 @app.route("/", methods=["GET"])
@@ -116,35 +148,24 @@ def handle_message(event):
 
     # เริ่มต้น flow
     if text == "เริ่มต้นใช้งาน":
-        name = get_user_name_from_sheet(user_id)
-        if name:
-            user_sessions[user_id] = {"step": "ask_inr", "name": name}
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text=f"👋 ยินดีต้อนรับกลับคุณ {name}!\n🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-                ])
-            )
-        else:
-            user_sessions[user_id] = {"step": "ask_name"}
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
-                ])
-            )
+        user_sessions[user_id] = {"step": "ask_name"}
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
+            ])
+        )
         return
-
 
     # ถามชื่อ
     if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
         user_sessions[user_id]["name"] = text
-        save_name_to_sheet(user_id, text)  # 🔹 เพิ่มบรรทัดนี้
         user_sessions[user_id]["step"] = "ask_inr"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-        ])
-    )
-    return
+            ])
+        )
+        return
 
     # ถามค่า INR
     if user_sessions[user_id]["step"] == "ask_inr":
@@ -206,6 +227,19 @@ def handle_message(event):
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
         )
+        return
+
+    if text == "ดูกราฟ INR":
+        history = get_inr_history(user_id)
+        if not history:
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="ไม่พบข้อมูล INR ย้อนหลังสำหรับคุณ")
+                ])
+            )
+        else:
+            chart_buf = generate_inr_chart(history)
+            reply_inr_chart_image(user_id, reply_token, chart_buf)
         return
 
     # กรณีไม่มี session
