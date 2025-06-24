@@ -1,8 +1,6 @@
-
 from flask import Flask, request, jsonify, abort
 import os
 import requests
-from datetime import datetime
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
@@ -11,13 +9,8 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
+
 load_dotenv()
-
-import matplotlib.pyplot as plt
-import io
-import tempfile
-
-
 
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
@@ -31,87 +24,33 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = " https://script.google.com/macros/s/AKfycbwxbfc3tY3YcUIhvlh4koGdnq2uexT5-lXq1XxViFpPx7V_pw__snBi_ycnL4KoSPk/exec"
-                           
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrNtxEAwnvgXbomU7Im7Ww53piAEql9Rf-580KD_FHD3vY1NeO1tG5PEFkzDWrVKSexw/exec"
+
 # ====== In-Memory Session ======
 user_sessions = {}
 
 # ====== ฟังก์ชันส่งข้อมูลไป Google Sheet ======
-def send_to_google_sheet(user_id, name, inr, bleeding="", supplement=""):
+def send_to_google_sheet(user_id, name, inr, bleeding="", supplement="", warfarin_dose=""):
     payload = {
         "userId": user_id,
         "name": name,
         "inr": inr,
         "bleeding": bleeding,
-        "supplement": supplement
+        "supplement": supplement,
+        "warfarin_dose": warfarin_dose
     }
-
     try:
         response = requests.post(GOOGLE_APPS_SCRIPT_URL, json=payload, timeout=10)
         return response.text
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
-def generate_inr_chart(history):
-    dates = [item["date"] for item in history][::-1]   # กลับลำดับให้เก่าสุดอยู่ซ้าย
-    inr_values = [float(item["inr"]) for item in history][::-1]
-
-    plt.figure(figsize=(6, 3))
-    plt.plot(dates, inr_values, marker="o", linestyle="-")
-    plt.title("📈 INR ย้อนหลัง")
-    plt.xlabel("วันที่")
-    plt.ylabel("ค่า INR")
-    plt.grid(True)
-    plt.tight_layout()
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close()
-
-    return buf
-def reply_inr_chart_image(user_id, reply_token, chart_buf):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-        tmpfile.write(chart_buf.read())
-        tmpfile_path = tmpfile.name
-
-    # 🔧 TODO: อัปโหลด tmpfile_path ไปยัง URL จริง แล้วแทนด้านล่าง
-    # 🔧 เช่น อัปโหลดไปยัง Imgur หรือใช้ Render static hosting
-    image_url = "https://your-host.com/path-to-uploaded-image.png"
-
-    messaging_api.reply_message(
-        ReplyMessageRequest(
-            reply_token=reply_token,
-            messages=[
-                ImageMessage(
-                    original_content_url=image_url,
-                    preview_image_url=image_url
-                )
-            ]
-        )
-    )
-
-def get_inr_history(user_id):
-    try:
-        response = requests.get(
-            GOOGLE_APPS_SCRIPT_URL,
-            params={"userId": user_id, "history": "true"},
-            timeout=10
-        )
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return []
-    except Exception as e:
-        print(f"Error fetching INR history: {e}")
-        return []
-
 # ====== หน้า Home ======
 @app.route("/", methods=["GET"])
 def home():
     return "✅ Flask on Render is live"
 
-# ====== API POST โดยตรงแบบ REST (Optional) ======
+# ====== API POST (Optional) ======
 @app.route("/log_inr", methods=["POST"])
 def log_inr():
     data = request.get_json()
@@ -120,11 +59,10 @@ def log_inr():
     inr = data.get("inr")
     bleeding = data.get("bleeding", "")
     supplement = data.get("supplement", "")
-
+    warfarin_dose = data.get("warfarin_dose", "")
     if not (userId and name and inr):
         return jsonify({"error": "Missing required fields"}), 400
-
-    result = send_to_google_sheet(userId, name, inr, bleeding, supplement)
+    result = send_to_google_sheet(userId, name, inr, bleeding, supplement, warfarin_dose)
     return jsonify({"status": "sent", "google_response": result})
 
 # ====== Webhook Endpoint (LINE) ======
@@ -132,7 +70,6 @@ def log_inr():
 def callback():
     signature = request.headers.get("X-Line-Signature")
     body = request.get_data(as_text=True)
-
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
@@ -146,7 +83,7 @@ def handle_message(event):
     reply_token = event.reply_token
     text = event.message.text.strip()
 
-    # เริ่มต้น flow
+    # เริ่มต้นใช้งาน
     if text == "เริ่มต้นใช้งาน":
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
@@ -156,10 +93,12 @@ def handle_message(event):
         )
         return
 
+    session = user_sessions.get(user_id)
+
     # ถามชื่อ
-    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
-        user_sessions[user_id]["name"] = text
-        user_sessions[user_id]["step"] = "ask_inr"
+    if session and session["step"] == "ask_name":
+        session["name"] = text
+        session["step"] = "ask_inr"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
@@ -167,12 +106,11 @@ def handle_message(event):
         )
         return
 
-    # ถามค่า INR
-    if user_sessions[user_id]["step"] == "ask_inr":
+    # ถาม INR
+    if session and session["step"] == "ask_inr":
         try:
-            inr = float(text)
-            user_sessions[user_id]["inr"] = inr
-            user_sessions[user_id]["step"] = "ask_bleeding"
+            session["inr"] = float(text)
+            session["step"] = "ask_bleeding"
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
                     TextMessage(text="🩸 มีภาวะเลือดออกหรือไม่? (yes/no)")
@@ -187,7 +125,7 @@ def handle_message(event):
         return
 
     # ถาม bleeding
-    if user_sessions[user_id]["step"] == "ask_bleeding":
+    if session and session["step"] == "ask_bleeding":
         if text.lower() not in ["yes", "no"]:
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
@@ -195,8 +133,8 @@ def handle_message(event):
                 ])
             )
             return
-        user_sessions[user_id]["bleeding"] = text.lower()
-        user_sessions[user_id]["step"] = "ask_supplement"
+        session["bleeding"] = text.lower()
+        session["step"] = "ask_supplement"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🌿 มีการใช้สมุนไพร/อาหารเสริมหรือไม่? (ถ้าไม่มี พิมพ์ 'ไม่มี')")
@@ -204,45 +142,54 @@ def handle_message(event):
         )
         return
 
-    # ✅ สุดท้าย: บันทึก Supplement และส่งไป Google Sheet
-    if user_sessions[user_id]["step"] == "ask_supplement":
-        session = user_sessions.pop(user_id)
+    # ถาม supplement
+    if session and session["step"] == "ask_supplement":
         session["supplement"] = text
+        session["step"] = "ask_warf_dose"
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="💊 กรุณาระบุขนาดยา Warfarin รายวันใน 1 สัปดาห์ (เช่น 3,3,3,3,3,1.5,-)")
+            ])
+        )
+        return
+
+    # ถาม dose warfarin
+    if session and session["step"] == "ask_warf_dose":
+        session["warfarin_dose"] = text
+        user_sessions.pop(user_id)  # ล้าง session
+
+        # แปลงเป็นรายวัน
+        dose_list = text.split(",")
+        days_th = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"]
+        doses_by_day = [f"📅 วัน{day}: {dose.strip()} mg" for day, dose in zip(days_th, dose_list)]
+        dose_preview = "\n".join(doses_by_day)
 
         result = send_to_google_sheet(
             user_id=user_id,
             name=session["name"],
             inr=session["inr"],
             bleeding=session["bleeding"],
-            supplement=session["supplement"]
+            supplement=session["supplement"],
+            warfarin_dose=session["warfarin_dose"]
         )
-        print(result)
 
         reply = f"""✅ ข้อมูลถูกบันทึกเรียบร้อยแล้ว
 👤 {session['name']}
 🧪 INR: {session['inr']}
 🩸 Bleeding: {session['bleeding']}
-🌿 Supplement: {session['supplement']}"""
+🌿 Supplement: {session['supplement']}
 
+💊 Warfarin (1 week):
+{dose_preview}
+"""
         messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=reply)])
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text=reply)
+            ])
         )
         return
 
-    if text == "ดูกราฟ INR":
-        history = get_inr_history(user_id)
-        if not history:
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="ไม่พบข้อมูล INR ย้อนหลังสำหรับคุณ")
-                ])
-            )
-        else:
-            chart_buf = generate_inr_chart(history)
-            reply_inr_chart_image(user_id, reply_token, chart_buf)
-        return
-
-    # กรณีไม่มี session
+    # หากไม่มี session
     if user_id not in user_sessions:
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
