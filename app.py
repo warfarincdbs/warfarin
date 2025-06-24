@@ -24,7 +24,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrNtxEAwnvgXbomU7Im7Ww53piAEql9Rf-580KD_FHD3vY1NeO1tG5PEFkzDWrVKSexw/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxR-oskhi0K-0w_DF-9v__Vg9KKyK7-y8IqLpKEoTlUGLygJ91ubk8eerihUF-v2MITJA/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -84,7 +84,7 @@ def handle_message(event):
     text = event.message.text.strip()
 
     # เริ่มต้นใช้งาน
-    if text == "เริ่มต้นใช้งาน":
+    if text == "บันทึกค่า INR":
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
