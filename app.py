@@ -237,43 +237,71 @@ def serve_image(filename):
     filepath = f"/tmp/{filename}"
     return send_file(filepath, mimetype="image/png")
 
-def get_adverse_symptom_flex_1():
-    return {
+def send_symptom_assessment_flex(reply_token):
+    # Flex 1: เลือกอาการเลือดออก
+    bubble_bleeding = {
         "type": "bubble",
-        "header": {"type": "box", "layout": "vertical", "contents": [
-            {"type": "text", "text": "เลือดออกผิดปกติ", "weight": "bold", "size": "lg"}
-        ]},
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{"type": "text", "text": "🩸 อาการเลือดออกผิดปกติ", "weight": "bold", "size": "lg"}]
+        },
         "body": {
             "type": "box",
             "layout": "vertical",
             "spacing": "md",
             "contents": [
-                {"type": "button", "style": "primary", "color": "#FF6F61", "action": {"type": "message", "label": "จ้ำเลือดตามตัว", "text": "จ้ำเลือด"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เลือดไหลไม่หยุด", "text": "เลือดไหลไม่หยุด"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไอเป็นเลือด", "text": "ไอเป็นเลือด"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไม่มีอาการกลุ่มนี้", "text": "ไม่มีอาการเลือดออก"}}
+                {"type": "text", "text": "คุณมีอาการใดต่อไปนี้หรือไม่?", "wrap": True},
+                *[
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#FFCDD2",
+                        "action": {"type": "message", "label": label, "text": label}
+                    }
+                    for label in ["เลือดกำเดา", "ปัสสาวะสีแดง", "อาเจียน/อุจจาระดำ", "จ้ำเลือด", "แผลเลือดออกหยุดยาก", "ไม่มีอาการ"]
+                ]
             ]
         }
     }
 
-def get_adverse_symptom_flex_2():
-    return {
+    # Flex 2: เลือกอาการลิ่มเลือดอุดตัน
+    bubble_clot = {
         "type": "bubble",
-        "header": {"type": "box", "layout": "vertical", "contents": [
-            {"type": "text", "text": "อาการลิ่มเลือดอุดตัน", "weight": "bold", "size": "lg"}
-        ]},
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{"type": "text", "text": "🧠 อาการลิ่มเลือดอุดตัน", "weight": "bold", "size": "lg"}]
+        },
         "body": {
             "type": "box",
             "layout": "vertical",
             "spacing": "md",
             "contents": [
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เวียนหัว พูดลำบาก", "text": "เวียนหัว พูดลำบาก"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เดินเซ หน้ามืด", "text": "เดินเซ หน้ามืด"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เจ็บหน้าอก", "text": "เจ็บหน้าอก"}},
-                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไม่มีอาการกลุ่มนี้", "text": "ไม่มีอาการลิ่มเลือด"}}
+                {"type": "text", "text": "คุณมีอาการใดต่อไปนี้หรือไม่?", "wrap": True},
+                *[
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#BBDEFB",
+                        "action": {"type": "message", "label": label, "text": label}
+                    }
+                    for label in ["แน่นหน้าอก", "หายใจลำบาก", "ขาบวมแดงร้อน", "อ่อนแรงครึ่งซีก", "พูดไม่ชัด", "ไม่มีอาการ"]
+                ]
             ]
         }
     }
+
+    messaging_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[
+                FlexMessage(alt_text="เลือดออกผิดปกติ", contents=FlexContainer.from_dict(bubble_bleeding)),
+                FlexMessage(alt_text="ลิ่มเลือดอุดตัน", contents=FlexContainer.from_dict(bubble_clot))
+            ]
+        )
+    )
+
 
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -282,6 +310,25 @@ def handle_message(event):
     reply_token = event.reply_token
     text = event.message.text.strip()
     session = user_sessions.get(user_id, {})
+
+    bleeding_symptoms = ["เลือดกำเดา", "ปัสสาวะสีแดง", "อาเจียน/อุจจาระดำ", "จ้ำเลือด", "แผลเลือดออกหยุดยาก"]
+    clot_symptoms = ["แน่นหน้าอก", "หายใจลำบาก", "ขาบวมแดงร้อน", "อ่อนแรงครึ่งซีก", "พูดไม่ชัด"]
+
+    if text in bleeding_symptoms:
+        msg = "⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ โปรดหยุดยา Warfarin และพบแพทย์ทันที"
+    elif text in clot_symptoms:
+        msg = "⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ โปรดพบแพทย์โดยด่วน"
+    elif text == "ไม่มีอาการ":
+        msg = "✅ ขอบคุณสำหรับการประเมิน ไม่มีอาการผิดปกติในขณะนี้"
+    else:
+        msg = None
+
+    if msg:
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
+        )
+        return
+    
 
     if text == "ดูกราฟ INR":
         dates, inrs = get_inr_history_from_sheet(user_id)
@@ -333,21 +380,6 @@ def handle_message(event):
         )
         return
 
-    if text == "ประเมินอาการไม่พึงประสงค์":
-        bubble1 = get_adverse_symptom_flex_1()
-        bubble2 = get_adverse_symptom_flex_2()
-
-        flex = {
-            "type": "carousel",
-            "contents": [bubble1, bubble2]
-        }
-
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                FlexMessage(alt_text="โปรดเลือกอาการที่พบ", contents=flex)
-            ])
-        )
-        return
 
     # เริ่มต้น flow
         # เริ่มต้น flow
@@ -483,30 +515,10 @@ def handle_message(event):
         )
         return
 
-    if text in ["จ้ำเลือด", "เลือดไหลไม่หยุด", "ไอเป็นเลือด"]:
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="⚠️ พบอาการเลือดออกผิดปกติ\n⛔ หยุดยา Warfarin แล้วไปพบแพทย์ทันที!")
-            ])
-        )
+    if text == "ประเมินอาการไม่พึงประสงค์":
+        send_symptom_assessment_flex(reply_token)
         return
-
-    if text in ["เวียนหัว พูดลำบาก", "เดินเซ หน้ามืด", "เจ็บหน้าอก"]:
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="⚠️ อาจเกิดภาวะลิ่มเลือดอุดตัน\n🏥 รีบไปโรงพยาบาลภายใน 3 ชั่วโมง!")
-            ])
-        )
-        return
-
-    if text in ["ไม่มีอาการเลือดออก", "ไม่มีอาการลิ่มเลือด"]:
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="😊 ขอบคุณที่แจ้งข้อมูล หากมีอาการผิดปกติภายหลัง กรุณาประเมินอีกครั้ง")
-            ])
-        )
-        return
-
+    
 
     # หากไม่ได้อยู่ในขั้นตอนใดเลย
     if user_id not in user_sessions:
