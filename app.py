@@ -227,29 +227,30 @@ def handle_message(event):
 
 
     # เริ่มต้น flow
+        # เริ่มต้น flow
     if text == "บันทึกค่า INR":
         profile = get_user_profile(user_id)
-    if profile and profile.get("firstName"):
-        # มีข้อมูลชื่ออยู่แล้ว → ข้ามไปถาม INR ทันที
-        user_sessions[user_id] = {
-            "name": f"{profile['firstName']} {profile.get('lastName', '')}".strip(),
-            "birthdate": profile.get("birthdate", ""),
-            "step": "ask_inr"
-        }
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-            ])
-        )
-    else:
-        # ยังไม่เคยกรอก → เริ่มถามชื่อ
-        user_sessions[user_id] = {"step": "ask_name"}
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
-            ])
-        )
-    return
+        if profile and profile.get("firstName"):
+            # มีข้อมูลชื่ออยู่แล้ว → ข้ามไปถาม INR ทันที
+            user_sessions[user_id] = {
+                "name": f"{profile['firstName']} {profile.get('lastName', '')}".strip(),
+                "birthdate": profile.get("birthdate", ""),
+                "step": "ask_inr"
+            }
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+                ])
+            )
+        else:
+            # ยังไม่เคยกรอก → เริ่มถามชื่อ
+            user_sessions[user_id] = {"step": "ask_name"}
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
+                ])
+            )
+        return
 
 
     # ถามชื่อ
