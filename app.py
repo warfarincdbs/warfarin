@@ -21,6 +21,8 @@ load_dotenv()
 
 from inr_chart import generate_inr_chart
 from flask import send_file  # อย่าลืม import นี้ด้านบน
+from linebot.v3.messaging import FlexMessage
+from linebot.v3.messaging.models import FlexContainer
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -235,6 +237,43 @@ def serve_image(filename):
     filepath = f"/tmp/{filename}"
     return send_file(filepath, mimetype="image/png")
 
+def get_adverse_symptom_flex_1():
+    return {
+        "type": "bubble",
+        "header": {"type": "box", "layout": "vertical", "contents": [
+            {"type": "text", "text": "เลือดออกผิดปกติ", "weight": "bold", "size": "lg"}
+        ]},
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {"type": "button", "style": "primary", "color": "#FF6F61", "action": {"type": "message", "label": "จ้ำเลือดตามตัว", "text": "จ้ำเลือด"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เลือดไหลไม่หยุด", "text": "เลือดไหลไม่หยุด"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไอเป็นเลือด", "text": "ไอเป็นเลือด"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไม่มีอาการกลุ่มนี้", "text": "ไม่มีอาการเลือดออก"}}
+            ]
+        }
+    }
+
+def get_adverse_symptom_flex_2():
+    return {
+        "type": "bubble",
+        "header": {"type": "box", "layout": "vertical", "contents": [
+            {"type": "text", "text": "อาการลิ่มเลือดอุดตัน", "weight": "bold", "size": "lg"}
+        ]},
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เวียนหัว พูดลำบาก", "text": "เวียนหัว พูดลำบาก"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เดินเซ หน้ามืด", "text": "เดินเซ หน้ามืด"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "เจ็บหน้าอก", "text": "เจ็บหน้าอก"}},
+                {"type": "button", "style": "primary", "action": {"type": "message", "label": "ไม่มีอาการกลุ่มนี้", "text": "ไม่มีอาการลิ่มเลือด"}}
+            ]
+        }
+    }
 
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -291,6 +330,22 @@ def handle_message(event):
 
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
+        )
+        return
+
+    if text == "ประเมินอาการไม่พึงประสงค์":
+        bubble1 = get_adverse_symptom_flex_1()
+        bubble2 = get_adverse_symptom_flex_2()
+
+        flex = {
+            "type": "carousel",
+            "contents": [bubble1, bubble2]
+        }
+
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                FlexMessage(alt_text="โปรดเลือกอาการที่พบ", contents=flex)
+            ])
         )
         return
 
@@ -428,6 +483,31 @@ def handle_message(event):
         )
         return
 
+    if text in ["จ้ำเลือด", "เลือดไหลไม่หยุด", "ไอเป็นเลือด"]:
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="⚠️ พบอาการเลือดออกผิดปกติ\n⛔ หยุดยา Warfarin แล้วไปพบแพทย์ทันที!")
+            ])
+        )
+        return
+
+    if text in ["เวียนหัว พูดลำบาก", "เดินเซ หน้ามืด", "เจ็บหน้าอก"]:
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="⚠️ อาจเกิดภาวะลิ่มเลือดอุดตัน\n🏥 รีบไปโรงพยาบาลภายใน 3 ชั่วโมง!")
+            ])
+        )
+        return
+
+    if text in ["ไม่มีอาการเลือดออก", "ไม่มีอาการลิ่มเลือด"]:
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="😊 ขอบคุณที่แจ้งข้อมูล หากมีอาการผิดปกติภายหลัง กรุณาประเมินอีกครั้ง")
+            ])
+        )
+        return
+
+
     # หากไม่ได้อยู่ในขั้นตอนใดเลย
     if user_id not in user_sessions:
         messaging_api.reply_message(
@@ -435,6 +515,7 @@ def handle_message(event):
                 TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อเริ่มบันทึกข้อมูล INR")
             ])
         )
+
 
 
 # ====== Run App ======
