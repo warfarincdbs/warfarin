@@ -21,11 +21,6 @@ load_dotenv()
 from inr_chart import generate_inr_chart
 from flask import send_file  # อย่าลืม import นี้ด้านบน
 
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-import requests
-
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -38,7 +33,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzopJeXyDmbOPQv0qFjMXg-vGuxcRNQVMYP3VXEuaVns1rYzY1K0gD9a0UQvaKHVHs/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -66,51 +61,20 @@ def home():
     return "✅ Flask on Render is live"
 
 # ====== แจ้งเตือนการกินยา (สำหรับเรียกจาก scheduler) ======
-def connect_sheet():
-    scope = ['https://spreadsheets.google.com/feeds',
-             'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-
-# ========== แปลงวันเป็นคอลัมน์ภาษาไทย ==========
-def get_today_column():
-    thai_days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์']
-    today_index = datetime.now().weekday()
-    return thai_days[today_index]
-
-# ========== ส่งข้อความเข้า LINE ==========
-def send_line_notify(user_id, message):
-    url = 'https://api.line.me/v2/bot/message/push'
-    headers = {
-        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
-        'Content-Type': 'application/json'
+def send_medication_reminders():
+    # ตัวอย่าง static dict, เปลี่ยนเป็นอ่านจากฐานข้อมูลจริง
+    medication_schedule = {
+        "Uxxxxxxxxxxxx1": {"Monday": "สีชมพู 1 เม็ด", "Tuesday": "งดยา", "Wednesday": "สีชมพู 1 เม็ด"},
+        "Uxxxxxxxxxxxx2": {"Monday": "สีฟ้า ครึ่งเม็ด", "Tuesday": "สีฟ้า ครึ่งเม็ด"}
     }
-    payload = {
-        'to': user_id,
-        'messages': [{
-            'type': 'text',
-            'text': message
-        }]
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    print(f'Sent to {user_id}: {response.status_code}')
+    today = datetime.now().strftime("%A")
 
-# ========== MAIN ==========
-def main():
-    sheet = connect_sheet()
-    data = sheet.get_all_records()
-    today_col = get_today_column()
-
-    for row in data:
-        user_id = row.get('userID')
-        name = f"{row.get('firstName', '')} {row.get('lastName', '')}".strip()
-        message_text = row.get(today_col, '').strip()
-
-        if user_id and message_text and message_text != '-':
-            message = f"\U0001F4C5 วันนี้วัน{today_col}\nคุณ {name}\nกรุณากินยา\n{message_text}"
-            send_line_notify(user_id, message)
-
+    for user_id, schedule in medication_schedule.items():
+        message = schedule.get(today, "ไม่มีข้อมูลยา")
+        messaging_api.push_message(
+            user_id,
+            [TextMessage(text=f"วันนี้คุณต้องทานยา: {message}")]
+        )
 
 # ====== API POST โดยตรงแบบ REST (Optional) ======
 @app.route("/log_inr", methods=["POST"])
@@ -144,7 +108,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
+    url = "https://script.google.com/macros/s/AKfycbzzopJeXyDmbOPQv0qFjMXg-vGuxcRNQVMYP3VXEuaVns1rYzY1K0gD9a0UQvaKHVHs/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
@@ -410,8 +374,3 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-    
-@app.route("/daily_notify", methods=["GET"])
-def daily_notify():
-    main()
-    return "✅ ทดสอบส่งแจ้งเตือนเรียบร้อย"
