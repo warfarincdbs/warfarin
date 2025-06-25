@@ -11,7 +11,7 @@ from datetime import datetime
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
-    TextMessage, ReplyMessageRequest
+    TextMessage, ReplyMessageRequest,  ImageMessage 
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
@@ -33,7 +33,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbxslA3d641BIjPOClJZenJcuQRvJLkRp8MMMVGgh6Ssd_H50OXlfH2qpeYDvd_5MbjQ/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -104,10 +104,11 @@ def callback():
         abort(400)
     return "OK"
 
+
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec" # เปลี่ยน URL นี้
+    url = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
     try:
-        response = requests.get(url, params={"userId": user_id}, timeout=10)
+        response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
         if not data:
             return [], []
@@ -117,6 +118,7 @@ def get_inr_history_from_sheet(user_id):
     except Exception as e:
         print(f"Error fetching INR: {e}")
         return [], []
+
 
 
 def upload_image_and_reply(user_id, reply_token, image_buf):
@@ -195,17 +197,24 @@ def handle_message(event):
     text = event.message.text.strip()
 
     if text == "ดูกราฟ INR":
-            dates, inrs = get_inr_history_from_sheet(user_id)
-            if not dates:
-                messaging_api.reply_message(
-                    ReplyMessageRequest(reply_token=reply_token, messages=[
-                        TextMessage(text="❌ ไม่พบข้อมูล INR ย้อนหลังของคุณ")
-                    ])
-                )
-                return
-            buf = generate_inr_chart(dates, inrs)
-            upload_image_and_reply(user_id, reply_token, buf)
+        dates, inrs = get_inr_history_from_sheet(user_id)
+
+        # debug logs
+        print("DEBUG: dates =", dates)
+        print("DEBUG: inrs =", inrs)
+
+        if not dates or not inrs:
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="❌ ไม่พบข้อมูล INR ย้อนหลังของคุณ")
+                ])
+            )
             return
+
+        buf = generate_inr_chart(dates, inrs)
+        upload_image_and_reply(user_id, reply_token, buf)
+        return
+
 
     # เริ่มต้น flow
     if text == "บันทึกค่า INR":
