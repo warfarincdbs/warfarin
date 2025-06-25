@@ -33,16 +33,17 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzPV70V0ZIbGP2iYnSijJuqyN7tdz5VHG1C_jGyLpizTmVmSrdXklyt22gFkX_kkWkfQ/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
 
 # ====== ฟังก์ชันส่งข้อมูลไป Google Sheet ======
-def send_to_google_sheet(user_id, name, inr, bleeding="", supplement="", warfarin_dose=""):
+def send_to_google_sheet(user_id, name, birthdate, inr, bleeding="", supplement="", warfarin_dose=""):
     payload = {
         "userId": user_id,
         "name": name,
+        "birthdate": birthdate,  # ✅ เพิ่มตรงนี้
         "inr": inr,
         "bleeding": bleeding,
         "supplement": supplement,
@@ -81,6 +82,7 @@ def log_inr():
     data = request.get_json()
     userId = data.get("user_id")
     name = data.get("name")
+    birthdate = data.get("birthdate", "")  # ✅ เพิ่มบรรทัดนี้
     inr = data.get("inr")
     bleeding = data.get("bleeding", "")
     supplement = data.get("supplement", "")
@@ -89,7 +91,7 @@ def log_inr():
     if not (userId and name and inr):
         return jsonify({"error": "Missing required fields"}), 400
 
-    result = send_to_google_sheet(userId, name, inr, bleeding, supplement)
+    result = send_to_google_sheet(userId, name, birthdate, inr, bleeding, supplement, warfarin_dose)
     return jsonify({"status": "sent", "google_response": result})
 
 # ====== Webhook Endpoint (LINE) ======
@@ -106,7 +108,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec"
+    url = "https://script.google.com/macros/s/AKfycbxzPV70V0ZIbGP2iYnSijJuqyN7tdz5VHG1C_jGyLpizTmVmSrdXklyt22gFkX_kkWkfQ/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
@@ -229,6 +231,17 @@ def handle_message(event):
     # ถามชื่อ
     if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
         user_sessions[user_id]["name"] = text
+        user_sessions[user_id]["step"] = "ask_birthdate"
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดของคุณ (เช่น 01/01/2000)")
+            ])
+        )
+        return
+
+    # ถามวันเกิด
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_birthdate":
+        user_sessions[user_id]["birthdate"] = text
         user_sessions[user_id]["step"] = "ask_inr"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
@@ -311,12 +324,12 @@ def handle_message(event):
         result = send_to_google_sheet(
             user_id=user_id,
             name=session["name"],
+            birthdate=session["birthdate"],
             inr=session["inr"],
             bleeding=session["bleeding"],
             supplement=session["supplement"],
             warfarin_dose=session["warfarin_dose"]
         )
-
         reply = f"""✅ ข้อมูลถูกบันทึกเรียบร้อยแล้ว
 👤 {session['name']}
 🧪 INR: {session['inr']}
