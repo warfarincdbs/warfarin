@@ -205,6 +205,7 @@ def handle_message(event):
     user_id = event.source.user_id
     reply_token = event.reply_token
     text = event.message.text.strip()
+    session = user_sessions.get(user_id, {})
 
     if text == "ดูกราฟ INR":
         dates, inrs = get_inr_history_from_sheet(user_id)
@@ -230,35 +231,31 @@ def handle_message(event):
         # เริ่มต้น flow
     if text == "บันทึกค่า INR":
         profile = get_user_profile(user_id)
-    if profile and profile.get("firstName"):
-        # มีข้อมูลชื่ออยู่แล้ว → ข้ามไปถาม INR ทันที พร้อมทักทาย
-        full_name = f"{profile['firstName']} {profile.get('lastName', '')}".strip()
-        user_sessions[user_id] = {
-            "name": full_name,
-            "birthdate": profile.get("birthdate", ""),
-            "step": "ask_inr"
-        }
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text=f"🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}"),
-                TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-            ])
-        )
-    else:
-        # ยังไม่เคยกรอก → เริ่มถามชื่อ
-        user_sessions[user_id] = {"step": "ask_name"}
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
-            ])
-        )
-    return
+        if profile and profile.get("firstName"):
+            full_name = f"{profile['firstName']} {profile.get('lastName', '')}".strip()
+            user_sessions[user_id] = {
+                "name": full_name,
+                "birthdate": profile.get("birthdate", ""),
+                "step": "ask_inr"
+            }
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text=f"🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}"),
+                    TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+                ])
+            )
+        else:
+            user_sessions[user_id] = {"step": "ask_name"}
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
+                ])
+            )
+        return
 
-
-    # ถามชื่อ
-    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
-        user_sessions[user_id]["name"] = text
-        user_sessions[user_id]["step"] = "ask_birthdate"
+    if session.get("step") == "ask_name":
+        session["name"] = text
+        session["step"] = "ask_birthdate"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🎂 กรุณาพิมพ์วันเกิดของคุณ (เช่น 01/01/2000)")
@@ -266,10 +263,9 @@ def handle_message(event):
         )
         return
 
-    # ถามวันเกิด
-    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_birthdate":
-        user_sessions[user_id]["birthdate"] = text
-        user_sessions[user_id]["step"] = "ask_inr"
+    if session.get("step") == "ask_birthdate":
+        session["birthdate"] = text
+        session["step"] = "ask_inr"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
@@ -277,13 +273,11 @@ def handle_message(event):
         )
         return
 
-    # ถามค่า INR
-    session = user_sessions.get(user_id, {})
-    if user_sessions[user_id]["step"] == "ask_inr":
+    if session.get("step") == "ask_inr":
         try:
             inr = float(text)
-            user_sessions[user_id]["inr"] = inr
-            user_sessions[user_id]["step"] = "ask_bleeding"
+            session["inr"] = inr
+            session["step"] = "ask_bleeding"
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
                     TextMessage(text="🩸 มีภาวะเลือดออกหรือไม่? (yes/no)")
@@ -297,9 +291,7 @@ def handle_message(event):
             )
         return
 
-    # ถาม bleeding
-    session = user_sessions.get(user_id, {})
-    if session and session["step"] == "ask_bleeding":
+    if session.get("step") == "ask_bleeding":
         if text.lower() not in ["yes", "no"]:
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
@@ -316,25 +308,20 @@ def handle_message(event):
         )
         return
 
-    # ถาม supplement
-    session = user_sessions.get(user_id, {})
-    if session and session["step"] == "ask_supplement":
+    if session.get("step") == "ask_supplement":
         session["supplement"] = text
         session["step"] = "ask_warf_dose"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="💊 กรุณาระบุขนาดยา Warfarin รายวันใน 1 สัปดาห์ จันทร์,อังคาร,พุธ,....,อาทิตย์ (เช่น 3,3,3,3,3,1.5,0)")
+                TextMessage(text="💊 กรุณาระบุขนาดยา Warfarin รายวันใน 1 สัปดาห์ จันทร์,อังคาร,พุธ,...,อาทิตย์ (เช่น 3,3,3,3,3,1.5,0)")
             ])
         )
         return
 
-     # ถาม dose warfarin
-    session = user_sessions.get(user_id, {})
-    if session and session["step"] == "ask_warf_dose":
+    if session.get("step") == "ask_warf_dose":
         session["warfarin_dose"] = text
-        user_sessions.pop(user_id)  # ล้าง session
+        user_sessions.pop(user_id)
 
-        # แปลงเป็นรายวัน
         dose_list = text.split(",")
         if len(dose_list) != 7:
             messaging_api.reply_message(
@@ -374,14 +361,14 @@ def handle_message(event):
         )
         return
 
-
-    # กรณีไม่มี session
+    # หากไม่ได้อยู่ในขั้นตอนใดเลย
     if user_id not in user_sessions:
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อบันทึกข้อมูล INR")
+                TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อเริ่มบันทึกข้อมูล INR")
             ])
         )
+
 
 # ====== Run App ======
 if __name__ == "__main__":
