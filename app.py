@@ -21,6 +21,11 @@ load_dotenv()
 from inr_chart import generate_inr_chart
 from flask import send_file  # อย่าลืม import นี้ด้านบน
 
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
+import requests
+
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -61,20 +66,51 @@ def home():
     return "✅ Flask on Render is live"
 
 # ====== แจ้งเตือนการกินยา (สำหรับเรียกจาก scheduler) ======
-def send_medication_reminders():
-    # ตัวอย่าง static dict, เปลี่ยนเป็นอ่านจากฐานข้อมูลจริง
-    medication_schedule = {
-        "Uxxxxxxxxxxxx1": {"Monday": "สีชมพู 1 เม็ด", "Tuesday": "งดยา", "Wednesday": "สีชมพู 1 เม็ด"},
-        "Uxxxxxxxxxxxx2": {"Monday": "สีฟ้า ครึ่งเม็ด", "Tuesday": "สีฟ้า ครึ่งเม็ด"}
-    }
-    today = datetime.now().strftime("%A")
+def connect_sheet():
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+    client = gspread.authorize(creds)
+    return client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
-    for user_id, schedule in medication_schedule.items():
-        message = schedule.get(today, "ไม่มีข้อมูลยา")
-        messaging_api.push_message(
-            user_id,
-            [TextMessage(text=f"วันนี้คุณต้องทานยา: {message}")]
-        )
+# ========== แปลงวันเป็นคอลัมน์ภาษาไทย ==========
+def get_today_column():
+    thai_days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+    today_index = datetime.now().weekday()
+    return thai_days[today_index]
+
+# ========== ส่งข้อความเข้า LINE ==========
+def send_line_notify(user_id, message):
+    url = 'https://api.line.me/v2/bot/message/push'
+    headers = {
+        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        'to': user_id,
+        'messages': [{
+            'type': 'text',
+            'text': message
+        }]
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    print(f'Sent to {user_id}: {response.status_code}')
+
+# ========== MAIN ==========
+def main():
+    sheet = connect_sheet()
+    data = sheet.get_all_records()
+    today_col = get_today_column()
+
+    for row in data:
+        user_id = row.get('userID')
+        name = f"{row.get('firstName', '')} {row.get('lastName', '')}".strip()
+        message_text = row.get(today_col, '').strip()
+
+        if user_id and message_text and message_text != '-':
+            message = f"\U0001F4C5 วันนี้วัน{today_col}\nคุณ {name}\nกรุณากินยา\n{message_text}"
+            send_line_notify(user_id, message)
+
 
 # ====== API POST โดยตรงแบบ REST (Optional) ======
 @app.route("/log_inr", methods=["POST"])
