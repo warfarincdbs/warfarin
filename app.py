@@ -215,10 +215,10 @@ def generate_inr_chart(dates, inr_values):
     # ตั้ง y scale เริ่มที่ 0.5 ถึง 5.5
     ax.set_ylim(0.5, 6.2)
     ax.set_yticks([i * 0.5 for i in range(1, 12)])
-    ax.set_ylabel("ค่า INR")
+    ax.set_ylabel("INR")
     ax.set_xticks(range(len(dates)))
     ax.set_xticklabels(dates, rotation=45)
-    ax.set_title("กราฟ INR")
+    ax.set_title("INR chart")
 
     plt.tight_layout()
 
