@@ -1,11 +1,12 @@
 import requests
 
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxbfc3tY3YcUIhvlh4koGdnq2uexT5-lXq1XxViFpPx7V_pw__snBi_ycnL4KoSPk/exec"  # ⬅️ เปลี่ยนเป็น URL ของคุณ
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzPV70V0ZIbGP2iYnSijJuqyN7tdz5VHG1C_jGyLpizTmVmSrdXklyt22gFkX_kkWkfQ/exec"  # ⬅️ เปลี่ยนเป็น URL ของคุณ
 
-def send_to_google_sheet(user_id, name, inr, bleeding="", supplement="", warfarin_dose=""):
+def send_to_google_sheet(user_id, name, birthdate, inr, bleeding="", supplement="", warfarin_dose=""):
     payload = {
         "userId": user_id,
         "name": name,
+        "birthdate": birthdate,  # ✅ เพิ่มตรงนี้
         "inr": inr,
         "bleeding": bleeding,
         "supplement": supplement,
