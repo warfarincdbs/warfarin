@@ -121,6 +121,14 @@ def get_inr_history_from_sheet(user_id):
         print(f"Error fetching INR: {e}")
         return [], []
 
+def get_user_profile(user_id):
+    try:
+        response = requests.get(GOOGLE_APPS_SCRIPT_URL, params={"userId": user_id, "profile": "true"}, timeout=10)
+        data = response.json()
+        return data  # {firstName, lastName, birthdate} หรือ {}
+    except Exception as e:
+        print("❌ Error loading profile:", e)
+        return {}
 
 
 def upload_image_and_reply(user_id, reply_token, image_buf):
@@ -220,13 +228,29 @@ def handle_message(event):
 
     # เริ่มต้น flow
     if text == "บันทึกค่า INR":
+        profile = get_user_profile(user_id)
+    if profile and profile.get("firstName"):
+        # มีข้อมูลชื่ออยู่แล้ว → ข้ามไปถาม INR ทันที
+        user_sessions[user_id] = {
+            "name": f"{profile['firstName']} {profile.get('lastName', '')}".strip(),
+            "birthdate": profile.get("birthdate", ""),
+            "step": "ask_inr"
+        }
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
+            ])
+        )
+    else:
+        # ยังไม่เคยกรอก → เริ่มถามชื่อ
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
             ])
         )
-        return
+    return
+
 
     # ถามชื่อ
     if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
