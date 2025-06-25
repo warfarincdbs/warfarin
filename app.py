@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import io
 from PIL import Image
 import base64
+import matplotlib.font_manager as fm
 
 from datetime import datetime
 from linebot.v3 import WebhookHandler
@@ -193,6 +194,11 @@ def upload_image_and_reply(user_id, reply_token, image_buf):
 
 
 def generate_inr_chart(dates, inr_values):
+    # ใช้ฟอนต์ Sarabun หากมีในระบบ
+    font_path = "/usr/share/fonts/truetype/thai/Sarabun-Regular.ttf"
+    if not os.path.exists(font_path):
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"  # fallback
+    prop = fm.FontProperties(fname=font_path)
     fig, ax = plt.subplots(figsize=(8, 4))
 
     # ตัดค่าที่เกิน 5.5 แต่ให้วาดจุดไว้เหนือ 5.5
