@@ -38,7 +38,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzopJeXyDmbOPQv0qFjMXg-vGuxcRNQVMYP3VXEuaVns1rYzY1K0gD9a0UQvaKHVHs/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyG8I-FswgP82rOC8bm4EMk8insujzh_kEnleINnizy5RbBf6yaIKlu-jaRl7EB9oPQ/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -144,7 +144,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbzzopJeXyDmbOPQv0qFjMXg-vGuxcRNQVMYP3VXEuaVns1rYzY1K0gD9a0UQvaKHVHs/exec"
+    url = "https://script.google.com/macros/s/AKfycbyG8I-FswgP82rOC8bm4EMk8insujzh_kEnleINnizy5RbBf6yaIKlu-jaRl7EB9oPQ/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
@@ -262,6 +262,36 @@ def handle_message(event):
         upload_image_and_reply(user_id, reply_token, buf)
         return
 
+    if text == "วันนี้ฉันกินยาอย่างไร":
+        thai_days = ["วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์", "วันอาทิตย์"]
+        today_index = datetime.now().weekday()
+        today_th = thai_days[today_index] + " (คำอธิบาย)"
+
+        try:
+            response = requests.get(
+                GOOGLE_APPS_SCRIPT_URL,
+                params={"userId": user_id, "latest": "true"},
+                timeout=10
+            )
+            data = response.json()
+
+            if today_th in data:
+                today_dose = data[today_th]
+                if not today_dose or today_dose.strip() in ["", "งดยา", "-"]:
+                    msg = f"📅 วันนี้{thai_days[today_index]} คุณไม่มียา Warfarin ครับ"
+                else:
+                    msg = f"📅 วันนี้{thai_days[today_index]}\n💊 คุณต้องกินยา Warfarin ดังนี้:\n{today_dose}"
+            else:
+                msg = "❌ ไม่พบข้อมูลยาวันนี้ในระบบ"
+
+        except Exception as e:
+            print("❌ Error fetching today's dose:", e)
+            msg = "⚠️ เกิดข้อผิดพลาดในการดึงข้อมูลยา กรุณาลองใหม่ภายหลัง"
+
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
+        )
+        return
 
     # เริ่มต้น flow
         # เริ่มต้น flow
