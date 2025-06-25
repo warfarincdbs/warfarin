@@ -1,6 +1,5 @@
-flask
-line-bot-sdk==3.5.0
-matplotlib
-pillow
+Flask==2.3.3
 requests
 python-dotenv
+line-bot-sdk>=3.17.0
+matplotlib
