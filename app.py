@@ -2,6 +2,12 @@ from flask import Flask, request, jsonify, abort
 import os
 import requests
 
+import matplotlib.pyplot as plt
+import io
+from PIL import Image
+import base64
+
+from datetime import datetime
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
@@ -10,9 +16,10 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
-from inr_chart import generate_inr_chart
-
 load_dotenv()
+
+from inr_chart import generate_inr_chart
+from flask import send_file  # อย่าลืม import นี้ด้านบน
 
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
@@ -52,7 +59,23 @@ def send_to_google_sheet(user_id, name, inr, bleeding="", supplement="", warfari
 def home():
     return "✅ Flask on Render is live"
 
-# ====== API POST (Optional) ======
+# ====== แจ้งเตือนการกินยา (สำหรับเรียกจาก scheduler) ======
+def send_medication_reminders():
+    # ตัวอย่าง static dict, เปลี่ยนเป็นอ่านจากฐานข้อมูลจริง
+    medication_schedule = {
+        "Uxxxxxxxxxxxx1": {"Monday": "สีชมพู 1 เม็ด", "Tuesday": "งดยา", "Wednesday": "สีชมพู 1 เม็ด"},
+        "Uxxxxxxxxxxxx2": {"Monday": "สีฟ้า ครึ่งเม็ด", "Tuesday": "สีฟ้า ครึ่งเม็ด"}
+    }
+    today = datetime.now().strftime("%A")
+
+    for user_id, schedule in medication_schedule.items():
+        message = schedule.get(today, "ไม่มีข้อมูลยา")
+        messaging_api.push_message(
+            user_id,
+            [TextMessage(text=f"วันนี้คุณต้องทานยา: {message}")]
+        )
+
+# ====== API POST โดยตรงแบบ REST (Optional) ======
 @app.route("/log_inr", methods=["POST"])
 def log_inr():
     data = request.get_json()
@@ -62,9 +85,11 @@ def log_inr():
     bleeding = data.get("bleeding", "")
     supplement = data.get("supplement", "")
     warfarin_dose = data.get("warfarin_dose", "")
+
     if not (userId and name and inr):
         return jsonify({"error": "Missing required fields"}), 400
-    result = send_to_google_sheet(userId, name, inr, bleeding, supplement, warfarin_dose)
+
+    result = send_to_google_sheet(userId, name, inr, bleeding, supplement)
     return jsonify({"status": "sent", "google_response": result})
 
 # ====== Webhook Endpoint (LINE) ======
@@ -72,6 +97,7 @@ def log_inr():
 def callback():
     signature = request.headers.get("X-Line-Signature")
     body = request.get_data(as_text=True)
+
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
@@ -79,7 +105,7 @@ def callback():
     return "OK"
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/PASTE_YOUR_SCRIPT_ID_HERE/exec"  # เปลี่ยน URL นี้
+    url = "https://script.google.com/macros/s/AKfycbzbxslA3d641BIjPOClJZenJcuQRvJLkRp8MMMVGgh6Ssd_H50OXlfH2qpeYDvd_5MbjQ/exec" # เปลี่ยน URL นี้
     try:
         response = requests.get(url, params={"userId": user_id}, timeout=10)
         data = response.json()
@@ -91,22 +117,76 @@ def get_inr_history_from_sheet(user_id):
     except Exception as e:
         print(f"Error fetching INR: {e}")
         return [], []
-    
+
+
 def upload_image_and_reply(user_id, reply_token, image_buf):
-    from linebot.v3.messaging import ImageMessage, ReplyMessageRequest
-    tmp_path = f"/tmp/inr_chart_{user_id}.png"
+    # 1. บันทึกภาพลงเป็นไฟล์ชั่วคราว
+    filename = f"inr_chart_{user_id}.png"
+    tmp_path = f"/tmp/{filename}"
+
     with open(tmp_path, "wb") as f:
         f.write(image_buf.read())
-    with open(tmp_path, "rb") as f:
-        res = messaging_api.upload_rich_media(f)
 
-    image_url = res.content_provider.original_content_url
+    # 2. กำหนด URL สำหรับให้ LINE ดูภาพได้
+    image_url = f"https://warfarin.onrender.com/image/{filename}"  # ✅ เปลี่ยน domain
+
+    # 3. ส่งภาพกลับผ่าน LINE
     messaging_api.reply_message(
         ReplyMessageRequest(
             reply_token=reply_token,
-            messages=[ImageMessage(original_content_url=image_url, preview_image_url=image_url)]
+            messages=[
+                ImageMessage(
+                    original_content_url=image_url,
+                    preview_image_url=image_url
+                )
+            ]
         )
     )
+
+
+def generate_inr_chart(dates, inr_values):
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    # ตัดค่าที่เกิน 5.5 แต่ให้วาดจุดไว้เหนือ 5.5
+    clipped_values = [min(v, 5.5) for v in inr_values]
+
+    # วาดกราฟเส้น
+    ax.plot(dates, clipped_values, marker="o", color="#007bff", label="INR")
+
+    # เติม label ที่จุด
+    for i, (x, y, raw_y) in enumerate(zip(dates, clipped_values, inr_values)):
+        ax.text(x, y + 0.15, f"{raw_y:.1f}", ha="center", fontsize=10, color="black")
+        # ถ้า INR >= 6 ให้ใช้จุดแดง
+        if raw_y >= 6:
+            ax.plot(x, y, marker="o", color="red", markersize=10)
+
+    # พื้นหลังสีเขียวระหว่าง INR 2.0–3.5
+    ax.axhspan(2.0, 3.5, facecolor='green', alpha=0.1)
+
+    # ตั้ง y scale เริ่มที่ 0.5 ถึง 5.5
+    ax.set_ylim(0.5, 6.2)
+    ax.set_yticks([i * 0.5 for i in range(1, 12)])
+    ax.set_ylabel("ค่า INR")
+    ax.set_xticks(range(len(dates)))
+    ax.set_xticklabels(dates, rotation=45)
+    ax.set_title("กราฟ INR")
+
+    plt.tight_layout()
+
+    # แปลงเป็น buffer image
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close(fig)
+    buf.seek(0)
+
+    return buf    
+
+@app.route("/image/<filename>")
+def serve_image(filename):
+    filepath = f"/tmp/{filename}"
+    return send_file(filepath, mimetype="image/png")
+
+
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
@@ -115,19 +195,19 @@ def handle_message(event):
     text = event.message.text.strip()
 
     if text == "ดูกราฟ INR":
-        dates, inrs = get_inr_history_from_sheet(user_id)
-        if not dates:
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="❌ ไม่พบข้อมูล INR ย้อนหลังของคุณ")
-                ])
-            )
+            dates, inrs = get_inr_history_from_sheet(user_id)
+            if not dates:
+                messaging_api.reply_message(
+                    ReplyMessageRequest(reply_token=reply_token, messages=[
+                        TextMessage(text="❌ ไม่พบข้อมูล INR ย้อนหลังของคุณ")
+                    ])
+                )
+                return
+            buf = generate_inr_chart(dates, inrs)
+            upload_image_and_reply(user_id, reply_token, buf)
             return
-        buf = generate_inr_chart(dates, inrs)
-        upload_image_and_reply(user_id, reply_token, buf)
-        return
 
-    # เริ่มต้นใช้งาน
+    # เริ่มต้น flow
     if text == "บันทึกค่า INR":
         user_sessions[user_id] = {"step": "ask_name"}
         messaging_api.reply_message(
@@ -137,12 +217,10 @@ def handle_message(event):
         )
         return
 
-    session = user_sessions.get(user_id)
-
     # ถามชื่อ
-    if session and session["step"] == "ask_name":
-        session["name"] = text
-        session["step"] = "ask_inr"
+    if user_id in user_sessions and user_sessions[user_id]["step"] == "ask_name":
+        user_sessions[user_id]["name"] = text
+        user_sessions[user_id]["step"] = "ask_inr"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
@@ -150,11 +228,13 @@ def handle_message(event):
         )
         return
 
-    # ถาม INR
-    if session and session["step"] == "ask_inr":
+    # ถามค่า INR
+    session = user_sessions.get(user_id, {})
+    if user_sessions[user_id]["step"] == "ask_inr":
         try:
-            session["inr"] = float(text)
-            session["step"] = "ask_bleeding"
+            inr = float(text)
+            user_sessions[user_id]["inr"] = inr
+            user_sessions[user_id]["step"] = "ask_bleeding"
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
                     TextMessage(text="🩸 มีภาวะเลือดออกหรือไม่? (yes/no)")
@@ -169,6 +249,7 @@ def handle_message(event):
         return
 
     # ถาม bleeding
+    session = user_sessions.get(user_id, {})
     if session and session["step"] == "ask_bleeding":
         if text.lower() not in ["yes", "no"]:
             messaging_api.reply_message(
@@ -187,6 +268,7 @@ def handle_message(event):
         return
 
     # ถาม supplement
+    session = user_sessions.get(user_id, {})
     if session and session["step"] == "ask_supplement":
         session["supplement"] = text
         session["step"] = "ask_warf_dose"
@@ -197,13 +279,22 @@ def handle_message(event):
         )
         return
 
-    # ถาม dose warfarin
+     # ถาม dose warfarin
+    session = user_sessions.get(user_id, {})
     if session and session["step"] == "ask_warf_dose":
         session["warfarin_dose"] = text
         user_sessions.pop(user_id)  # ล้าง session
 
         # แปลงเป็นรายวัน
         dose_list = text.split(",")
+        if len(dose_list) != 7:
+            messaging_api.reply_message(
+                ReplyMessageRequest(reply_token=reply_token, messages=[
+                    TextMessage(text="❌ กรุณากรอกขนาดยา 7 วัน เช่น 3,3,3,3,3,1.5,0")
+                ])
+            )
+            return
+
         days_th = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"]
         doses_by_day = [f"📅 วัน{day}: {dose.strip()} mg" for day, dose in zip(days_th, dose_list)]
         dose_preview = "\n".join(doses_by_day)
@@ -226,6 +317,7 @@ def handle_message(event):
 💊 Warfarin (1 week):
 {dose_preview}
 """
+
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
                 TextMessage(text=reply)
@@ -233,11 +325,12 @@ def handle_message(event):
         )
         return
 
-    # หากไม่มี session
+
+    # กรณีไม่มี session
     if user_id not in user_sessions:
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="❓ พิมพ์ 'เริ่มต้นใช้งาน' เพื่อบันทึกข้อมูล INR")
+                TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อบันทึกข้อมูล INR")
             ])
         )
 
