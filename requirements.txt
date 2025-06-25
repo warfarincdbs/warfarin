@@ -3,3 +3,5 @@ requests
 python-dotenv
 line-bot-sdk>=3.17.0
 matplotlib
+gspread
+oauth2client
