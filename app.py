@@ -105,7 +105,7 @@ def callback():
     return "OK"
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbzbxslA3d641BIjPOClJZenJcuQRvJLkRp8MMMVGgh6Ssd_H50OXlfH2qpeYDvd_5MbjQ/exec" # เปลี่ยน URL นี้
+    url = "https://script.google.com/macros/s/AKfycbz7KNqrsM6_E-9__daxUy5nklgP72tlT3MvnYzKpqtXdVU0eZT4PDLgqlc1KAbR3XQi/exec" # เปลี่ยน URL นี้
     try:
         response = requests.get(url, params={"userId": user_id}, timeout=10)
         data = response.json()
