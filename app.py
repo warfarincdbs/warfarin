@@ -41,7 +41,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3W2_46doukESpw7E4wWw8QTpt8UzkaULP63Dw7TUj-yV0YGy22m-3HOmxBvGcivVs/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCU_DiYxORGTmf_7aLxaF9cY0nhE05xFPQjJLcb1DDZcW3-dRHZppiw5oDXfLw0yLQ/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -147,7 +147,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycby3W2_46doukESpw7E4wWw8QTpt8UzkaULP63Dw7TUj-yV0YGy22m-3HOmxBvGcivVs/exec"
+    url = "https://script.google.com/macros/s/AKfycbyCU_DiYxORGTmf_7aLxaF9cY0nhE05xFPQjJLcb1DDZcW3-dRHZppiw5oDXfLw0yLQ/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
