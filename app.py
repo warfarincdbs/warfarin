@@ -41,7 +41,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCU_DiYxORGTmf_7aLxaF9cY0nhE05xFPQjJLcb1DDZcW3-dRHZppiw5oDXfLw0yLQ/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwdi3et7_H6dHFA7dTNRjNESjljUq1KZl2JOitV0fDkeVORlvyJMBgEEEG9nqAdSP4D/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -147,7 +147,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbyCU_DiYxORGTmf_7aLxaF9cY0nhE05xFPQjJLcb1DDZcW3-dRHZppiw5oDXfLw0yLQ/exec"
+    url = "https://script.google.com/macros/s/AKfycbwdi3et7_H6dHFA7dTNRjNESjljUq1KZl2JOitV0fDkeVORlvyJMBgEEEG9nqAdSP4D/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
@@ -317,7 +317,7 @@ def handle_message(event):
     if text in bleeding_symptoms:
             msg = "⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ โปรดหยุดยา Warfarin และพบแพทย์ทันที"
     elif text in clot_symptoms:
-            msg = "⚠️ ตรวจพบอาการที่อาจเกิดลิ่มเลือดอุดตัน\n⛔ ถ้าอาการไม่ดีขึ้น ให้รีบไปโรงพยาบาลที่ใกล้ที่สุด"
+            msg = "⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั่วโมง"
     elif text == "ไม่มีอาการ":
             msg = "✅ ขอบคุณสำหรับการประเมิน ไม่มีอาการผิดปกติในขณะนี้"
     else:
