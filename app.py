@@ -30,6 +30,41 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import requests
 
+IMAGE_MAP = {
+    "0": "https://drive.google.com/uc?export=view&id=1c09a3DLOfaC2lC-m3WOAB9h-GnGFa48m",
+    "0.75": "https://drive.google.com/uc?export=view&id=1m_nhtV2I8sDNbJHUYMA08hEk3TXW1uf4",
+    "1.25": "https://drive.google.com/uc?export=view&id=1lOgIxMLgQOaIs1aGontgDy8FRfKwiaFL",
+    "1.5": "https://drive.google.com/uc?export=view&id=1fEG7H9me6j-wDGdYXQKhs2WstylsDl5W",
+    "2": "https://drive.google.com/uc?export=view&id=1SJoPRye20Wf877kXUYa9ACSNBfcvzROp",
+    "2.25": "https://drive.google.com/uc?export=view&id=1YsOoiYG9ov29lFWbZJlgoS1Zoiu2SG2R",
+    "2.5": "https://drive.google.com/uc?export=view&id=1kmeKhglMS3f5jv7tbv6C45HPXORS6AiA",
+    "2.75": "https://drive.google.com/uc?export=view&id=12ctuOXhRqCZY6NktugS1TruLOmVeCt19",
+    "3": "https://drive.google.com/uc?export=view&id=1be21Mzrpq6riO669wZss78_esYWfaoKI",
+    "3.25": "https://drive.google.com/uc?export=view&id=1Ms1nyvRGGCDWZ63598h5POF2Hg7DLWKd",
+    "3.5": "https://drive.google.com/uc?export=view&id=1rDkX_3SqF6GP-jt746s3uYOe8fTy8wPv",
+    "3.75": "https://drive.google.com/uc?export=view&id=16sceQqYjl-qhxctNqNj3GeTBlfxO6dOl",
+    "4": "https://drive.google.com/uc?export=view&id=1Th8_qcXk8jfjFD5keamr7tZGah83y6fB",
+    "4.25": "https://drive.google.com/uc?export=view&id=1pVvrvc9CpXqW75OOcudJqbDttZkftBrj",
+    "4.5": "https://drive.google.com/uc?export=view&id=1QKDTGNMySd8GcnqEMLLH9zgm_tUpKof1",
+    "4.75": "https://drive.google.com/uc?export=view&id=1Hmfmrn0sCpx_1QP4Orn3CNEMNLW1aWLz",
+    "5": "https://drive.google.com/uc?export=view&id=1ptPsnLBQunyfvWFLjwopCpepBx4A4qT",
+    "5.25": "https://drive.google.com/uc?export=view&id=/1hwAvP7F_PNDse1hz5JMNF8E-d5Up0NMj",
+    "5.5": "https://drive.google.com/uc?export=view&id=1Sv-bYt8oj64BdgSTlxWTgEDJGTFuA0dp",
+    "5.75": "https://drive.google.com/uc?export=view&id=1qArsPdoHn8BrB4D8I_Gvpl4rLLHEXmm2",
+    "6": "https://drive.google.com/uc?export=view&id=1k_uTxz9RcFTtbKbBo8rKxF3p-weJ5FCW",
+    "6.25": "https://drive.google.com/uc?export=view&id=1N2l_HTWjf_2A1MhmAGVxbfv8b31Jotow",
+    "6.5": "https://drive.google.com/uc?export=view&id=1UlQVLN4Iyqi7b6a8QI6-wa5giJPgZsAw",
+    "6.75": "https://drive.google.com/uc?export=view&id=1cx8othvz2F4wL2iKAc-t9-oPkx3OFhhi",
+    "7.25": "https://drive.google.com/uc?export=view&id=1kQB3TRe0a3OqfEsian1gOpfDjh3L0H8b",
+    "7.5": "https://drive.google.com/uc?export=view&id=1c4fmhyKmUuOHH0h2IBByOMkAk7jVp2N1",
+    "8": "https://drive.google.com/uc?export=view&id=1U7VpFrMZgY2jBd9a9MKcldRnDNGpFJho",
+    "8.75": "https://drive.google.com/uc?export=view&id=1XYUOURSRsjCsU3ytiuXSurpjBtuMzWEu",
+    "9": "https://drive.google.com/uc?export=view&id=1coevNSBRNss4DONxfp9ZHjVlI-WG5aM9",
+    "10": "https://drive.google.com/uc?export=view&id=15S_sJhUNZx-XElDkSeYav9msbf1Qa8U4",
+    # เพิ่มได้ตามขนาดยา
+}
+
+
 # ====== LINE API Setup ======
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -69,6 +104,12 @@ def send_to_google_sheet(user_id, name, birthdate, inr, bleeding="", supplement=
 def home():
     return "✅ Flask on Render is live"
 
+@app.route("/daily_notify", methods=["GET"])
+def daily_notify():
+    main()
+    return "📤 แจ้งเตือนเรียบร้อย"
+
+
 # ====== แจ้งเตือนการกินยา (สำหรับเรียกจาก scheduler) ======
 def connect_sheet():
     scope = ['https://spreadsheets.google.com/feeds',
@@ -85,19 +126,38 @@ def get_today_column():
 
 # ========== ส่งข้อความเข้า LINE ==========
 def send_line_notify(user_id, message):
-    url = 'https://api.line.me/v2/bot/message/push'
+    # หาค่าขนาดยา (เช่น 3 mg) จากข้อความ
+    dose = None
+    for token in message.split():
+        if token.endswith("mg"):
+            dose = token.replace("mg", "").strip()
+            break
+
+    # ดึง URL รูปจาก IMAGE_MAP
+    image_url = IMAGE_MAP.get(dose)
+
     headers = {
         'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
         'Content-Type': 'application/json'
     }
+
+    # สร้างข้อความ text เป็น default
+    messages = [{'type': 'text', 'text': message}]
+
+    # ถ้ามีรูปภาพขนาดยานี้ → เพิ่มข้อความแบบ image
+    if image_url:
+        messages.append({
+            'type': 'image',
+            'originalContentUrl': image_url,
+            'previewImageUrl': image_url
+        })
+
     payload = {
         'to': user_id,
-        'messages': [{
-            'type': 'text',
-            'text': message
-        }]
+        'messages': messages
     }
-    response = requests.post(url, headers=headers, json=payload)
+
+    response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=payload)
     print(f'Sent to {user_id}: {response.status_code}')
 
 # ========== MAIN ==========
