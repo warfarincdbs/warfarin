@@ -314,45 +314,20 @@ def handle_message(event):
     bleeding_symptoms = ["จุดจ้ำเลือด","เลือดไหลไม่หยุด","ไอ/อาเจียนเป็นเลือด","อุจจาระสีดำ","ปัสสาวะมีสีสนิม","ประจำเดือนมามากผิดปกติ"]
     clot_symptoms = ["เจ็บหน้าอก หายใจลำบาก", "ปวด/เวียนศีรษะ", "แขนขาบวม", "อ่อนแรงครึ่งซีก แขนขาชา", "พูดไม่ชัด"]
 
-    # ตรวจว่าเป็นคำตอบกลุ่มอาการ
-    if text in bleeding_symptoms + clot_symptoms:
-        session = user_sessions.setdefault(user_id, {"step": "adverse_symptom", "bleeding": None, "clot": None})
-
-        # บันทึกคำตอบ
         if text in bleeding_symptoms:
-            session["bleeding"] = text
+            msg = "⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ โปรดหยุดยา Warfarin และพบแพทย์ทันที"
         elif text in clot_symptoms:
-            session["clot"] = text
+            msg = "⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั่วโมง"
+        elif text == "ไม่มีอาการ":
+            msg = "✅ ขอบคุณสำหรับการประเมิน ไม่มีอาการผิดปกติในขณะนี้"
+        else:
+            msg = None
 
-        # ถ้ายังตอบไม่ครบ ให้รอ
-        if not session["bleeding"] or not session["clot"]:
+        if msg:
             messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="✅ รับข้อมูลแล้ว กรุณาตอบอีกกลุ่มอาการที่เหลือ")
-                ])
+                ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
             )
             return
-
-        # ตอบกลับเมื่อครบทั้ง 2 กลุ่ม
-        summary = []
-
-        if session["bleeding"] != "ไม่มีอาการ":
-            summary.append("⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ หยุดยา Warfarin และไปพบแพทย์ทันที")
-        if session["clot"] != "ไม่มีอาการ":
-            summary.append("⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั้วโมง")
-        if not summary:
-            summary.append("✅ ขอบคุณสำหรับการประเมิน\nไม่มีอาการผิดปกติในขณะนี้")
-
-        # ล้าง session
-        user_sessions.pop(user_id, None)
-
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="\n\n".join(summary))
-            ])
-        )
-        return
-
 
     if text == "ดูกราฟ INR":
         dates, inrs = get_inr_history_from_sheet(user_id)
