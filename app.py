@@ -23,6 +23,7 @@ from inr_chart import generate_inr_chart
 from flask import send_file  # อย่าลืม import นี้ด้านบน
 from linebot.v3.messaging import FlexMessage
 from linebot.v3.messaging.models import FlexContainer
+from linebot.v3.messaging import QuickReply, QuickReplyItem, MessageAction
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -382,10 +383,52 @@ def handle_message(event):
             ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
         )
         return
-
+# ✅ เพิ่มฟังก์ชันสำหรับอัปเดตโปรไฟล์ (ไว้ท้ายไฟล์หรือส่วน util)
 
     # เริ่มต้น flow
         # เริ่มต้น flow
+    # ✅ เพิ่มใน handler ด้านบน (ก่อน session flow)
+    if text == "แก้ชื่อ":
+        user_sessions[user_id] = {"step": "edit_name"}
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="📛 กรุณาพิมพ์ชื่อ-นามสกุลใหม่ของคุณ")
+            ])
+        )
+        return
+
+    if text == "แก้วันเกิด":
+        user_sessions[user_id] = {"step": "edit_birthdate"}
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดใหม่ (เช่น 01/01/2000)")
+            ])
+        )
+        return
+
+    if session.get("step") == "edit_name":
+        new_name = text.strip()
+        update_user_profile(user_id=user_id, new_name=new_name)
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text=f"✅ เปลี่ยนชื่อเป็น \"{new_name}\" เรียบร้อยแล้ว")
+            ])
+        )
+        user_sessions.pop(user_id, None)
+        return
+
+    if session.get("step") == "edit_birthdate":
+        new_birthdate = text.strip()
+        update_user_profile(user_id=user_id, new_birthdate=new_birthdate)
+        messaging_api.reply_message(
+            ReplyMessageRequest(reply_token=reply_token, messages=[
+                TextMessage(text=f"✅ เปลี่ยนวันเกิดเป็น {new_birthdate} เรียบร้อยแล้ว")
+            ])
+        )
+        user_sessions.pop(user_id, None)
+        return
+
+# ✅ แก้ไขส่วนข้อความตอบกลับตอนโหลด profile เพื่อเพิ่ม Quick Reply
     if text == "บันทึกค่า INR":
         profile = get_user_profile(user_id)
         if profile and profile.get("firstName"):
@@ -397,18 +440,18 @@ def handle_message(event):
             }
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text=f"🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}"),
+                    TextMessage(
+                        text=f"🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}\n🎂 วันเกิด: {profile.get('birthdate', 'ไม่พบ')}",
+                        quick_reply=QuickReply(items=[
+                            QuickReplyItem(action=MessageAction(label="✏️ แก้ชื่อ", text="แก้ชื่อ")),
+                            QuickReplyItem(action=MessageAction(label="🎂 แก้วันเกิด", text="แก้วันเกิด"))
+                        ])
+                    ),
                     TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
                 ])
             )
-        else:
-            user_sessions[user_id] = {"step": "ask_name"}
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="👤 กรุณาพิมพ์ชื่อ-นามสกุลของคุณ")
-                ])
-            )
-        return
+            return
+
 
     if session.get("step") == "ask_name":
         session["name"] = text
@@ -530,6 +573,17 @@ def handle_message(event):
                 TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อเริ่มบันทึกข้อมูล INR")
             ])
         )
+def update_user_profile(user_id, new_name=None, new_birthdate=None):
+    payload = {
+        "userId": user_id,
+        "update_name": new_name,
+        "update_dob": new_birthdate
+    }
+    try:
+        response = requests.post(GOOGLE_APPS_SCRIPT_URL, json=payload, timeout=10)
+        print("🔄 อัปเดตโปรไฟล์:", response.text)
+    except Exception as e:
+        print("❌ ERROR while updating profile:", e)
 
 
 
