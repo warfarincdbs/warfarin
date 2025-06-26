@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, abort
 import os
 import requests
@@ -21,8 +20,6 @@ load_dotenv()
 
 from inr_chart import generate_inr_chart
 from flask import send_file  # อย่าลืม import นี้ด้านบน
-from linebot.v3.messaging import FlexMessage
-from linebot.v3.messaging.models import FlexContainer
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -41,7 +38,7 @@ messaging_api = MessagingApi(ApiClient(configuration))
 app = Flask(__name__)
 
 # ====== Google Apps Script Webhook URL ======
-GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyG8I-FswgP82rOC8bm4EMk8insujzh_kEnleINnizy5RbBf6yaIKlu-jaRl7EB9oPQ/exec"
+GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3W2_46doukESpw7E4wWw8QTpt8UzkaULP63Dw7TUj-yV0YGy22m-3HOmxBvGcivVs/exec"
 
 # ====== In-Memory Session ======
 user_sessions = {}
@@ -147,7 +144,7 @@ def callback():
 
 
 def get_inr_history_from_sheet(user_id):
-    url = "https://script.google.com/macros/s/AKfycbyG8I-FswgP82rOC8bm4EMk8insujzh_kEnleINnizy5RbBf6yaIKlu-jaRl7EB9oPQ/exec"
+    url = "https://script.google.com/macros/s/AKfycby3W2_46doukESpw7E4wWw8QTpt8UzkaULP63Dw7TUj-yV0YGy22m-3HOmxBvGcivVs/exec"
     try:
         response = requests.get(url, params={"userId": user_id, "history": "true"}, timeout=10)
         data = response.json()
@@ -217,10 +214,10 @@ def generate_inr_chart(dates, inr_values):
     # ตั้ง y scale เริ่มที่ 0.5 ถึง 5.5
     ax.set_ylim(0.5, 6.2)
     ax.set_yticks([i * 0.5 for i in range(1, 12)])
-    ax.set_ylabel("INR")
+    ax.set_ylabel("ค่า INR")
     ax.set_xticks(range(len(dates)))
     ax.set_xticklabels(dates, rotation=45)
-    ax.set_title("INR chart")
+    ax.set_title("กราฟ INR")
 
     plt.tight_layout()
 
@@ -237,71 +234,6 @@ def serve_image(filename):
     filepath = f"/tmp/{filename}"
     return send_file(filepath, mimetype="image/png")
 
-def send_symptom_assessment_flex(reply_token):
-    # Flex 1: เลือกอาการเลือดออก
-    bubble_bleeding = {
-        "type": "bubble",
-        "header": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [{"type": "text", "text": "🩸 อาการเลือดออกผิดปกติ", "weight": "bold", "size": "lg"}]
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "spacing": "md",
-            "contents": [
-                {"type": "text", "text": "คุณมีอาการใดต่อไปนี้หรือไม่?", "wrap": True},
-                *[
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#FFCDD2",
-                        "action": {"type": "message", "label": label, "text": label}
-                    }
-                    for label in ["จุดจ้ำเลือด","เลือดไหลไม่หยุด","ไอ/อาเจียนเป็นเลือด","อุจจาระสีดำ","ปัสสาวะมีสีสนิม","ประจำเดือนมามากผิดปกติ", "ไม่มีอาการ"]
-                ]
-            ]
-        }
-    }
-
-    # Flex 2: เลือกอาการลิ่มเลือดอุดตัน
-    bubble_clot = {
-        "type": "bubble",
-        "header": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [{"type": "text", "text": "🧠 อาการลิ่มเลือดอุดตัน", "weight": "bold", "size": "lg"}]
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "spacing": "md",
-            "contents": [
-                {"type": "text", "text": "คุณมีอาการใดต่อไปนี้หรือไม่?", "wrap": True},
-                *[
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#BBDEFB",
-                        "action": {"type": "message", "label": label, "text": label}
-                    }
-                    for label in ["เจ็บหน้าอก หายใจลำบาก", "ปวด/เวียนศีรษะ", "แขนขาบวม", "อ่อนแรงครึ่งซีก แขนขาชา", "พูดไม่ชัด","ไม่มีอาการ"]
-                ]
-            ]
-        }
-    }
-
-    messaging_api.reply_message(
-        ReplyMessageRequest(
-            reply_token=reply_token,
-            messages=[
-                FlexMessage(alt_text="เลือดออกผิดปกติ", contents=FlexContainer.from_dict(bubble_bleeding)),
-                FlexMessage(alt_text="ลิ่มเลือดอุดตัน", contents=FlexContainer.from_dict(bubble_clot))
-            ]
-        )
-    )
-
 
 # ====== LINE Message Handler ======
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -310,49 +242,6 @@ def handle_message(event):
     reply_token = event.reply_token
     text = event.message.text.strip()
     session = user_sessions.get(user_id, {})
-
-    bleeding_symptoms = ["จุดจ้ำเลือด","เลือดไหลไม่หยุด","ไอ/อาเจียนเป็นเลือด","อุจจาระสีดำ","ปัสสาวะมีสีสนิม","ประจำเดือนมามากผิดปกติ"]
-    clot_symptoms = ["เจ็บหน้าอก หายใจลำบาก", "ปวด/เวียนศีรษะ", "แขนขาบวม", "อ่อนแรงครึ่งซีก แขนขาชา", "พูดไม่ชัด"]
-
-    # ตรวจว่าเป็นคำตอบกลุ่มอาการ
-    if text in bleeding_symptoms + clot_symptoms:
-        session = user_sessions.setdefault(user_id, {"step": "adverse_symptom", "bleeding": None, "clot": None})
-
-        # บันทึกคำตอบ
-        if text in bleeding_symptoms:
-            session["bleeding"] = text
-        elif text in clot_symptoms:
-            session["clot"] = text
-
-        # ถ้ายังตอบไม่ครบ ให้รอ
-        if not session["bleeding"] or not session["clot"]:
-            messaging_api.reply_message(
-                ReplyMessageRequest(reply_token=reply_token, messages=[
-                    TextMessage(text="✅ รับข้อมูลแล้ว กรุณาตอบอีกกลุ่มอาการที่เหลือ")
-                ])
-            )
-            return
-
-        # ตอบกลับเมื่อครบทั้ง 2 กลุ่ม
-        summary = []
-
-        if session["bleeding"] != "ไม่มีอาการ":
-            summary.append("⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ หยุดยา Warfarin และไปพบแพทย์ทันที")
-        if session["clot"] != "ไม่มีอาการ":
-            summary.append("⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั้วโมง")
-        if not summary:
-            summary.append("✅ ขอบคุณสำหรับการประเมิน\nไม่มีอาการผิดปกติในขณะนี้")
-
-        # ล้าง session
-        user_sessions.pop(user_id, None)
-
-        messaging_api.reply_message(
-            ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="\n\n".join(summary))
-            ])
-        )
-        return
-
 
     if text == "ดูกราฟ INR":
         dates, inrs = get_inr_history_from_sheet(user_id)
@@ -403,7 +292,6 @@ def handle_message(event):
             ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
         )
         return
-
 
     # เริ่มต้น flow
         # เริ่มต้น flow
@@ -539,11 +427,6 @@ def handle_message(event):
         )
         return
 
-    if text == "ประเมินอาการไม่พึงประสงค์":
-        send_symptom_assessment_flex(reply_token)
-        return
-    
-
     # หากไม่ได้อยู่ในขั้นตอนใดเลย
     if user_id not in user_sessions:
         messaging_api.reply_message(
@@ -551,7 +434,6 @@ def handle_message(event):
                 TextMessage(text="❓ พิมพ์ 'บันทึกค่า INR' เพื่อเริ่มบันทึกข้อมูล INR")
             ])
         )
-
 
 
 # ====== Run App ======
