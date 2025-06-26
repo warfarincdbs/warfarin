@@ -316,14 +316,14 @@ def handle_message(event):
 
     if text in bleeding_symptoms:
             msg = "⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ โปรดหยุดยา Warfarin และพบแพทย์ทันที"
-        elif text in clot_symptoms:
+    elif text in clot_symptoms:
             msg = "⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั่วโมง"
-        elif text == "ไม่มีอาการ":
+    elif text == "ไม่มีอาการ":
             msg = "✅ ขอบคุณสำหรับการประเมิน ไม่มีอาการผิดปกติในขณะนี้"
-        else:
+    else:
             msg = None
 
-        if msg:
+    if msg:
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
             )
