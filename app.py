@@ -442,7 +442,6 @@ def handle_message(event):
                 ReplyMessageRequest(reply_token=reply_token, messages=[
                     TextMessage(
                         text=f"""🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}
-                🎂 วันเกิด: {profile.get('birthdate', 'ไม่พบ')}
                 🧪 กรุณาพิมพ์ค่า INR เช่น 2.7""",
                         quick_reply=QuickReply(items=[
                             QuickReplyItem(action=MessageAction(label="✏️ แก้ชื่อ", text="แก้ชื่อ")),
