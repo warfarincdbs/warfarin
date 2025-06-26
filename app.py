@@ -401,7 +401,7 @@ def handle_message(event):
         user_sessions[user_id] = {"step": "edit_birthdate"}
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดใหม่ (เช่น 01/01/2000)")
+                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดใหม่ (เช่น 01/01/2540)")
             ])
         )
         return
@@ -457,7 +457,7 @@ def handle_message(event):
         session["step"] = "ask_birthdate"
         messaging_api.reply_message(
             ReplyMessageRequest(reply_token=reply_token, messages=[
-                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดของคุณ (เช่น 01/01/2000)")
+                TextMessage(text="🎂 กรุณาพิมพ์วันเกิดของคุณ (เช่น 01/01/2540)")
             ])
         )
         return
