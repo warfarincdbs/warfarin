@@ -196,6 +196,10 @@ def upload_image_and_reply(user_id, reply_token, image_buf):
 
 
 def generate_inr_chart(dates, inr_values):
+
+    dates.reverse()
+    inr_values.reverse()
+
     fig, ax = plt.subplots(figsize=(8, 4))
 
     # ตัดค่าที่เกิน 5.5 แต่ให้วาดจุดไว้เหนือ 5.5
@@ -317,7 +321,7 @@ def handle_message(event):
     if text in bleeding_symptoms:
             msg = "⚠️ ตรวจพบอาการเลือดออกผิดปกติ\n⛔ โปรดหยุดยา Warfarin และพบแพทย์ทันที"
     elif text in clot_symptoms:
-            msg = "⚠️ ตรวจพบอาการลิ่มเลือดอุดตัน\n⛔ รีบไปโรงพยาบาลที่ใกล้ที่สุด ภายใน 3 ชั่วโมง"
+            msg = "⚠️ ตรวจพบอาการที่อาจเกิดลิ่มเลือดอุดตัน\n⛔ ถ้าอาการไม่ดีขึ้น ให้รีบไปโรงพยาบาลที่ใกล้ที่สุด"
     elif text == "ไม่มีอาการ":
             msg = "✅ ขอบคุณสำหรับการประเมิน ไม่มีอาการผิดปกติในขณะนี้"
     else:
