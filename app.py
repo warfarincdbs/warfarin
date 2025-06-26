@@ -441,15 +441,15 @@ def handle_message(event):
             messaging_api.reply_message(
                 ReplyMessageRequest(reply_token=reply_token, messages=[
                     TextMessage(
-                        text=f"🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}\n🎂 วันเกิด: {profile.get('birthdate', 'ไม่พบ')}",
+                        text=f"""🙋‍♂️ ยินดีต้อนรับกลับมาคุณ {full_name}
+                🎂 วันเกิด: {profile.get('birthdate', 'ไม่พบ')}
+                🧪 กรุณาพิมพ์ค่า INR เช่น 2.7""",
                         quick_reply=QuickReply(items=[
                             QuickReplyItem(action=MessageAction(label="✏️ แก้ชื่อ", text="แก้ชื่อ")),
                             QuickReplyItem(action=MessageAction(label="🎂 แก้วันเกิด", text="แก้วันเกิด"))
                         ])
-                    ),
-                    TextMessage(text="🧪 กรุณาพิมพ์ค่า INR เช่น 2.7")
-                ])
-            )
+                    )
+                ]))
             return
 
 
