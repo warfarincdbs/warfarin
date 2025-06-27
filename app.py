@@ -467,8 +467,17 @@ def handle_message(event):
                 today_dose = data[today_th]
                 if not today_dose or today_dose.strip() in ["", "งดยา", "-"]:
                     msg = f"📅 วันนี้{thai_days[today_index]} คุณไม่มียา Warfarin ครับ"
+
+                    image_url = DOSE_IMAGE_MAP.get("0")  # รูปงดยา
+                    messages = [TextMessage(text=msg)]
+                    if image_url:
+                        messages.append(ImageMessage(
+                            original_content_url=image_url,
+                            preview_image_url=image_url
+                        ))
+
                     messaging_api.reply_message(
-                        ReplyMessageRequest(reply_token=reply_token, messages=[TextMessage(text=msg)])
+                        ReplyMessageRequest(reply_token=reply_token, messages=messages)
                     )
                     return
 
