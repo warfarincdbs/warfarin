@@ -171,12 +171,12 @@ def main():
         name = f"{row.get('firstName', '')} {row.get('lastName', '')}".strip()
         message_text = row.get(today_col, '').strip()
 
-    if user_id and message_text and message_text != '-':
-        # ✅ เพิ่มบรรทัดนี้
-        dose_with_unit = f"{message_text} mg" if "mg" not in message_text.lower() else message_text
+        if user_id and message_text and message_text != '-':
+            # ✅ เพิ่มบรรทัดนี้: เติม mg อัตโนมัติถ้าไม่มี
+            dose_with_unit = f"{message_text} mg" if "mg" not in message_text.lower() else message_text
 
-        message = f"\U0001F4C5 วันนี้วัน{today_col}\nคุณ {name}\nกรุณากินยา\n{dose_with_unit}"
-        send_line_notify(user_id, message)
+            message = f"\U0001F4C5 วันนี้วัน{today_col}\nคุณ {name}\nกรุณากินยา\n{dose_with_unit}"
+            send_line_notify(user_id, message)
 
 
 
